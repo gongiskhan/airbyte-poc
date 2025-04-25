@@ -2,20 +2,47 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Connect HubSpot with Airbyte</title>
+  <title>Airbyte Embedded POC</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 800px;
+      max-width: 1000px;
       margin: 0 auto;
       padding: 20px;
+      line-height: 1.6;
     }
-    h1 {
+    h1, h2, h3 {
       color: #333;
     }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .step {
+      margin-bottom: 30px;
+    }
+    .step-title {
+      display: flex;
+      align-items: center;
+    }
+    .step-number {
+      background-color: #614FE0;
+      color: white;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 10px;
+      font-weight: bold;
+    }
     button {
-      background-color: #0078ff;
+      background-color: #614FE0;
       color: white;
       border: none;
       padding: 10px 20px;
@@ -25,10 +52,29 @@
       margin-right: 10px;
     }
     button:hover {
-      background-color: #0056b3;
+      background-color: #4A3EB2;
     }
-    #status {
-      margin-top: 20px;
+    button:disabled {
+      background-color: #9B97D0;
+      cursor: not-allowed;
+    }
+    input, select {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-right: 10px;
+      width: 250px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    .status {
+      margin-top: 10px;
       padding: 10px;
       border-radius: 4px;
       display: none;
@@ -45,113 +91,592 @@
       background-color: #d4edda;
       color: #155724;
     }
-    .instructions {
+    .resource-info {
       background-color: #f8f9fa;
-      border-left: 4px solid #0078ff;
-      padding: 15px;
+      border-left: 4px solid #614FE0;
+      padding: 10px 15px;
+      margin: 10px 0;
+      font-family: monospace;
+      overflow-x: auto;
+    }
+    .airbyte-logo {
+      max-width: 120px;
+      margin-bottom: 20px;
+    }
+    .diagram {
+      max-width: 100%;
       margin: 20px 0;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .flex-container {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .flex-item {
+      flex: 1;
+    }
+    .alert {
+      padding: 15px;
+      background-color: #fff3cd;
+      color: #856404;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .hidden {
+      display: none !important;
     }
   </style>
 </head>
 <body>
-  <h1>Connect HubSpot with Airbyte</h1>
+  <img src="https://assets.website-files.com/605e01bc25f7e19a82e6ebd7/6326fd24f5129b825337ec11_airbyte-logo.svg" alt="Airbyte Logo" class="airbyte-logo">
+  <h1>Airbyte Embedded POC</h1>
   
-  <div class="instructions">
-    <h3>Before connecting:</h3>
-    <p>1. Make sure your Airbyte API key is valid by clicking "Test Airbyte Connection"</p>
-    <p>2. If the test fails, you need to generate a new API key:</p>
-    <ol style="margin-left: 20px;">
-      <li>Go to Airbyte Cloud UI > Settings > Account > Applications</li>
-      <li>Click "Create an application" and name it</li>
-      <li>Copy the Client ID and Client Secret</li>
-      <li>Update server.js with these credentials</li>
-      <li>Generate an access token with these credentials</li>
-    </ol>
-    <p>3. Once the connection test passes, you can connect your HubSpot account</p>
-    <p><a href="/api-key-debug" target="_blank">⚙️ Debug API key issues</a></p>
+  <p>
+    This proof of concept demonstrates how to implement Airbyte Embedded (Powered by Airbyte) for your SaaS application.
+    Follow the steps below to set up a complete embedded data integration flow.
+  </p>
+  
+  <div class="alert">
+    <strong>Note:</strong> This POC follows the Headless version of Airbyte Embedded where your application controls the UI
+    and uses Airbyte's API in the background.
   </div>
   
-  <div>
-    <button onclick="testAirbyteConnection()">Test Airbyte Connection</button>
-    <button onclick="connectHubspot()">Connect HubSpot</button>
+  <!-- Step 1: Test Connection -->
+  <div class="step card" id="step1">
+    <div class="step-title">
+      <div class="step-number">1</div>
+      <h2>Test Airbyte API Connection</h2>
+    </div>
+    <p>First, let's make sure we can connect to the Airbyte API using your credentials.</p>
+    <button onclick="testConnection()">Test Connection</button>
+    <div id="status-step1" class="status"></div>
   </div>
   
-  <div id="status"></div>
+  <!-- Step 2: Create Workspace -->
+  <div class="step card" id="step2">
+    <div class="step-title">
+      <div class="step-number">2</div>
+      <h2>Create a Workspace</h2>
+    </div>
+    <p>Each of your customers should have their own workspace in Airbyte to organize their sources, destinations and connections.</p>
+    
+    <div class="form-group">
+      <label for="workspaceName">Workspace Name:</label>
+      <input type="text" id="workspaceName" placeholder="My Customer Workspace" value="OpSpot Demo Workspace">
+    </div>
+    
+    <div class="form-group">
+      <label for="workspaceEmail">Email (optional):</label>
+      <input type="email" id="workspaceEmail" placeholder="customer@example.com" value="demo@opspot.com">
+    </div>
+    
+    <button onclick="createWorkspace()" id="createWorkspaceBtn" disabled>Create Workspace</button>
+    <div id="status-step2" class="status"></div>
+    <div id="workspace-info" class="resource-info hidden"></div>
+  </div>
+  
+  <!-- Step 3: Setup a Source -->
+  <div class="step card" id="step3">
+    <div class="step-title">
+      <div class="step-number">3</div>
+      <h2>Setup a Source with OAuth</h2>
+    </div>
+    <p>Let's set up a data source for your customer using OAuth. This opens a consent screen where they authorize access to their data.</p>
+    
+    <div class="form-group">
+      <label for="sourceType">Source Type:</label>
+      <select id="sourceType">
+        <option value="hubspot">HubSpot</option>
+        <option value="google-sheets">Google Sheets</option>
+        <option value="facebook">Facebook</option>
+        <option value="stripe">Stripe</option>
+      </select>
+    </div>
+    
+    <button onclick="findSourceDefinition()" id="findSourceBtn" disabled>Find Source Definition</button>
+    <div id="status-step3-find" class="status"></div>
+    <div id="source-def-info" class="resource-info hidden"></div>
+    
+    <div class="form-group" id="oauth-section" style="margin-top: 20px;">
+      <button onclick="initiateOAuth()" id="initiateOAuthBtn" disabled>Connect via OAuth</button>
+      <div id="status-step3" class="status"></div>
+      <div id="source-info" class="resource-info hidden"></div>
+    </div>
+  </div>
+  
+  <!-- Step 4: Setup a Destination -->
+  <div class="step card" id="step4">
+    <div class="step-title">
+      <div class="step-number">4</div>
+      <h2>Create a Destination</h2>
+    </div>
+    <p>Now, let's create a destination where the data will be sent. This is typically your application's database or storage.</p>
+    
+    <div class="form-group">
+      <label for="destinationType">Destination Type:</label>
+      <select id="destinationType">
+        <option value="postgres">PostgreSQL</option>
+        <option value="s3">Amazon S3</option>
+        <option value="bigquery">BigQuery</option>
+        <option value="snowflake">Snowflake</option>
+      </select>
+    </div>
+    
+    <button onclick="findDestinationDefinition()" id="findDestBtn" disabled>Find Destination Definition</button>
+    <div id="status-step4-find" class="status"></div>
+    <div id="dest-def-info" class="resource-info hidden"></div>
+    
+    <div id="postgres-config" class="form-group hidden">
+      <h3>PostgreSQL Configuration</h3>
+      
+      <div class="form-group">
+        <label for="destName">Destination Name:</label>
+        <input type="text" id="destName" value="Demo PostgreSQL Database">
+      </div>
+      
+      <div class="form-group">
+        <label for="dbHost">Host:</label>
+        <input type="text" id="dbHost" value="postgres.example.com">
+      </div>
+      
+      <div class="form-group">
+        <label for="dbPort">Port:</label>
+        <input type="text" id="dbPort" value="5432">
+      </div>
+      
+      <div class="form-group">
+        <label for="dbName">Database Name:</label>
+        <input type="text" id="dbName" value="demo_db">
+      </div>
+      
+      <div class="form-group">
+        <label for="dbSchema">Schema:</label>
+        <input type="text" id="dbSchema" value="public">
+      </div>
+      
+      <div class="form-group">
+        <label for="dbUser">Username:</label>
+        <input type="text" id="dbUser" value="postgres">
+      </div>
+      
+      <div class="form-group">
+        <label for="dbPassword">Password:</label>
+        <input type="password" id="dbPassword" value="password">
+      </div>
+      
+      <button onclick="createDestination()" id="createDestBtn" disabled>Create Destination</button>
+      <div id="status-step4" class="status"></div>
+      <div id="destination-info" class="resource-info hidden"></div>
+    </div>
+  </div>
+  
+  <!-- Step 5: Create Connection -->
+  <div class="step card" id="step5">
+    <div class="step-title">
+      <div class="step-number">5</div>
+      <h2>Create a Connection</h2>
+    </div>
+    <p>Now, let's create a connection between the source and destination to define how data will flow.</p>
+    
+    <div class="form-group">
+      <label for="connectionName">Connection Name:</label>
+      <input type="text" id="connectionName" value="Demo Connection">
+    </div>
+    
+    <button onclick="createConnection()" id="createConnectionBtn" disabled>Create Connection</button>
+    <div id="status-step5" class="status"></div>
+    <div id="connection-info" class="resource-info hidden"></div>
+  </div>
+  
+  <!-- Step 6: Sync Data -->
+  <div class="step card" id="step6">
+    <div class="step-title">
+      <div class="step-number">6</div>
+      <h2>Sync Data</h2>
+    </div>
+    <p>Finally, trigger a data sync to start moving data from the source to the destination.</p>
+    
+    <button onclick="triggerSync()" id="triggerSyncBtn" disabled>Trigger Sync</button>
+    <div id="status-step6" class="status"></div>
+    <div id="sync-info" class="resource-info hidden"></div>
+  </div>
+  
+  <!-- Step 7: Success -->
+  <div class="step card hidden" id="step7">
+    <div class="step-title">
+      <div class="step-number">7</div>
+      <h2>Success!</h2>
+    </div>
+    <p>You have successfully implemented the Airbyte Embedded flow! Your application is now ready to provide data integration capabilities to your users.</p>
+    
+    <div class="resource-info">
+      <h3>Summary of Resources Created:</h3>
+      <div id="summary-info"></div>
+    </div>
+  </div>
 
   <script>
-    const statusElement = document.getElementById('status');
+    // Store IDs and state
+    const state = {
+      workspaceId: null,
+      sourceDefinitionId: null,
+      sourceId: null,
+      destinationDefinitionId: null,
+      destinationId: null,
+      connectionId: null
+    };
     
-    async function testAirbyteConnection() {
-      statusElement.textContent = "Testing connection to Airbyte...";
-      statusElement.className = "info";
-      statusElement.style.display = "block";
-      
-      try {
-        const response = await fetch('/test-connection', {
-          method: 'POST'
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || data.details || 'Connection test failed');
-        }
-        
-        if (data.workspaces && data.workspaces.length > 0) {
-          statusElement.textContent = `✅ Connected to Airbyte successfully! First workspace: ${data.workspaces[0].name}`;
-        } else {
-          statusElement.textContent = `✅ Connected to Airbyte successfully! (No workspaces found or accessible)`
-        }
-        statusElement.className = "success";
-      } catch (error) {
-        console.error('Error testing connection:', error);
-        statusElement.textContent = `❌ Error: ${error.message}`;
-        statusElement.className = "error";
-      }
+    // Utility functions
+    function showStatus(stepId, message, type) {
+      const statusElement = document.getElementById(`status-${stepId}`);
+      statusElement.textContent = message;
+      statusElement.className = `status ${type}`;
+      statusElement.style.display = 'block';
     }
-  
-    async function connectHubspot() {
-      statusElement.textContent = "Connecting to HubSpot...";
-      statusElement.className = "info";
-      statusElement.style.display = "block";
-      
+    
+    function hideStatus(stepId) {
+      const statusElement = document.getElementById(`status-${stepId}`);
+      statusElement.style.display = 'none';
+    }
+    
+    function showResourceInfo(id, content) {
+      const infoElement = document.getElementById(id);
+      infoElement.innerHTML = typeof content === 'object' ? 
+        JSON.stringify(content, null, 2) : content;
+      infoElement.classList.remove('hidden');
+    }
+    
+    function enableButton(buttonId) {
+      document.getElementById(buttonId).disabled = false;
+    }
+    
+    async function fetchData(url, method = 'GET', body = null) {
       try {
-        // Using relative URL instead of absolute URL
-        const response = await fetch('/start-hubspot-connection', {
-          method: 'POST'
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.details || data.message || data.error || 'Failed to connect to HubSpot');
-        }
-        
-        if (!data.consentUrl) {
-          throw new Error('No consent URL received from server');
-        }
-        
-        statusElement.textContent = "Opening HubSpot authorization window...";
-        const popup = window.open(data.consentUrl, '_blank', 'width=600,height=800');
-
-        if (!popup) {
-          throw new Error('Popup was blocked. Please allow popups for this site and try again.');
-        }
-
-        const checkPopup = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(checkPopup);
-            statusElement.textContent = "HubSpot connection flow completed!";
-            statusElement.className = "success";
-            // Optionally fetch status here
+        const options = {
+          method,
+          headers: {
+            'Content-Type': 'application/json'
           }
-        }, 1000);
+        };
+        
+        if (body) {
+          options.body = JSON.stringify(body);
+        }
+        
+        const response = await fetch(url, options);
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.message || data.error || 'An unknown error occurred');
+        }
+        
+        return data;
       } catch (error) {
-        console.error('Error connecting to HubSpot:', error);
-        statusElement.textContent = `❌ Error: ${error.message}`;
-        statusElement.className = "error";
+        console.error(`Error fetching ${url}:`, error);
+        throw error;
       }
     }
+    
+    // Step 1: Test Connection
+    async function testConnection() {
+      try {
+        showStatus('step1', 'Testing connection to Airbyte API...', 'info');
+        
+        const data = await fetchData('/test-connection', 'POST');
+        
+        showStatus('step1', '✅ Connected to Airbyte API successfully!', 'success');
+        enableButton('createWorkspaceBtn');
+      } catch (error) {
+        showStatus('step1', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 2: Create Workspace
+    async function createWorkspace() {
+      try {
+        const name = document.getElementById('workspaceName').value;
+        const email = document.getElementById('workspaceEmail').value;
+        
+        if (!name) {
+          showStatus('step2', '❌ Workspace name is required', 'error');
+          return;
+        }
+        
+        showStatus('step2', 'Creating workspace...', 'info');
+        
+        const data = await fetchData('/create-workspace', 'POST', { name, email });
+        
+        state.workspaceId = data.workspace.workspaceId;
+        showStatus('step2', `✅ Workspace created successfully: ${data.workspace.name}`, 'success');
+        showResourceInfo('workspace-info', data.workspace);
+        
+        enableButton('findSourceBtn');
+      } catch (error) {
+        showStatus('step2', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 3a: Find Source Definition
+    async function findSourceDefinition() {
+      try {
+        const sourceType = document.getElementById('sourceType').value;
+        
+        showStatus('step3-find', `Finding ${sourceType} source definition...`, 'info');
+        
+        const data = await fetchData(`/source-definitions?name=${sourceType}`);
+        
+        state.sourceDefinitionId = data.sourceDefinition.sourceDefinitionId;
+        showStatus('step3-find', `✅ Found ${data.sourceDefinition.name} source definition`, 'success');
+        showResourceInfo('source-def-info', data.sourceDefinition);
+        
+        enableButton('initiateOAuthBtn');
+      } catch (error) {
+        showStatus('step3-find', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 3b: Initiate OAuth
+    async function initiateOAuth() {
+      try {
+        if (!state.workspaceId) {
+          showStatus('step3', '❌ Please create a workspace first', 'error');
+          return;
+        }
+        
+        if (!state.sourceDefinitionId) {
+          showStatus('step3', '❌ Please find a source definition first', 'error');
+          return;
+        }
+        
+        showStatus('step3', 'Initiating OAuth flow...', 'info');
+        
+        const data = await fetchData('/initiate-oauth', 'POST', {
+          workspaceId: state.workspaceId,
+          sourceDefinitionId: state.sourceDefinitionId
+        });
+        
+        // Open OAuth consent window
+        const popup = window.open(data.consentUrl, '_blank', 'width=800,height=600');
+        
+        if (!popup) {
+          throw new Error('Popup was blocked! Please allow popups for this site.');
+        }
+        
+        showStatus('step3', 'OAuth consent window opened. Please complete the authorization.', 'info');
+        
+        // Listen for messages from the popup
+        window.addEventListener('message', function(event) {
+          // Check if it's our expected message
+          if (event.data && event.data.type) {
+            if (event.data.type === 'OAUTH_SUCCESS') {
+              state.sourceId = event.data.sourceId;
+              showStatus('step3', '✅ OAuth successful! Source created.', 'success');
+              showResourceInfo('source-info', { sourceId: state.sourceId });
+              
+              enableButton('findDestBtn');
+            } else if (event.data.type === 'OAUTH_ERROR') {
+              showStatus('step3', `❌ OAuth Error: ${event.data.error}`, 'error');
+            }
+          }
+        });
+      } catch (error) {
+        showStatus('step3', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 4a: Find Destination Definition
+    async function findDestinationDefinition() {
+      try {
+        const destinationType = document.getElementById('destinationType').value;
+        
+        showStatus('step4-find', `Finding ${destinationType} destination definition...`, 'info');
+        
+        const data = await fetchData(`/destination-definitions?name=${destinationType}`);
+        
+        state.destinationDefinitionId = data.destinationDefinition.destinationDefinitionId;
+        showStatus('step4-find', `✅ Found ${data.destinationDefinition.name} destination definition`, 'success');
+        showResourceInfo('dest-def-info', data.destinationDefinition);
+        
+        // Show configuration form for the selected destination
+        if (destinationType === 'postgres') {
+          document.getElementById('postgres-config').classList.remove('hidden');
+        }
+        
+        enableButton('createDestBtn');
+      } catch (error) {
+        showStatus('step4-find', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 4b: Create Destination
+    async function createDestination() {
+      try {
+        if (!state.workspaceId) {
+          showStatus('step4', '❌ Please create a workspace first', 'error');
+          return;
+        }
+        
+        if (!state.destinationDefinitionId) {
+          showStatus('step4', '❌ Please find a destination definition first', 'error');
+          return;
+        }
+        
+        const destinationType = document.getElementById('destinationType').value;
+        const name = document.getElementById('destName').value;
+        
+        if (!name) {
+          showStatus('step4', '❌ Destination name is required', 'error');
+          return;
+        }
+        
+        let connectionConfiguration = {};
+        
+        // Build connection configuration based on destination type
+        if (destinationType === 'postgres') {
+          connectionConfiguration = {
+            host: document.getElementById('dbHost').value,
+            port: parseInt(document.getElementById('dbPort').value, 10),
+            database: document.getElementById('dbName').value,
+            schema: document.getElementById('dbSchema').value,
+            username: document.getElementById('dbUser').value,
+            password: document.getElementById('dbPassword').value,
+            ssl: false
+          };
+        }
+        
+        showStatus('step4', 'Creating destination...', 'info');
+        
+        const data = await fetchData('/create-destination', 'POST', {
+          workspaceId: state.workspaceId,
+          destinationDefinitionId: state.destinationDefinitionId,
+          name,
+          connectionConfiguration
+        });
+        
+        state.destinationId = data.destination.destinationId;
+        showStatus('step4', `✅ Destination created successfully: ${data.destination.name}`, 'success');
+        showResourceInfo('destination-info', data.destination);
+        
+        enableButton('createConnectionBtn');
+      } catch (error) {
+        showStatus('step4', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 5: Create Connection
+    async function createConnection() {
+      try {
+        if (!state.sourceId) {
+          showStatus('step5', '❌ Please create a source first', 'error');
+          return;
+        }
+        
+        if (!state.destinationId) {
+          showStatus('step5', '❌ Please create a destination first', 'error');
+          return;
+        }
+        
+        const name = document.getElementById('connectionName').value;
+        
+        if (!name) {
+          showStatus('step5', '❌ Connection name is required', 'error');
+          return;
+        }
+        
+        showStatus('step5', 'Creating connection...', 'info');
+        
+        const data = await fetchData('/create-connection', 'POST', {
+          sourceId: state.sourceId,
+          destinationId: state.destinationId,
+          name
+        });
+        
+        state.connectionId = data.connection.connectionId;
+        showStatus('step5', `✅ Connection created successfully: ${data.connection.name}`, 'success');
+        showResourceInfo('connection-info', data.connection);
+        
+        enableButton('triggerSyncBtn');
+      } catch (error) {
+        showStatus('step5', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Step 6: Trigger Sync
+    async function triggerSync() {
+      try {
+        if (!state.connectionId) {
+          showStatus('step6', '❌ Please create a connection first', 'error');
+          return;
+        }
+        
+        showStatus('step6', 'Triggering data sync...', 'info');
+        
+        const data = await fetchData('/trigger-sync', 'POST', {
+          connectionId: state.connectionId
+        });
+        
+        showStatus('step6', `✅ Sync job triggered successfully! Job ID: ${data.job.jobId}`, 'success');
+        showResourceInfo('sync-info', data.job);
+        
+        // Show final success step
+        document.getElementById('step7').classList.remove('hidden');
+        
+        // Show summary
+        showResourceInfo('summary-info', `
+          <p><strong>Workspace ID:</strong> ${state.workspaceId}</p>
+          <p><strong>Source ID:</strong> ${state.sourceId}</p>
+          <p><strong>Destination ID:</strong> ${state.destinationId}</p>
+          <p><strong>Connection ID:</strong> ${state.connectionId}</p>
+          <p><strong>Job ID:</strong> ${data.job.jobId}</p>
+        `);
+      } catch (error) {
+        showStatus('step6', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+    
+    // Check existing state on page load
+    async function checkExistingState() {
+      try {
+        const demoState = await fetchData('/demo-state');
+        
+        if (demoState.workspaceId) {
+          state.workspaceId = demoState.workspaceId;
+          showStatus('step2', '✅ Workspace already exists', 'success');
+          showResourceInfo('workspace-info', { workspaceId: demoState.workspaceId });
+          enableButton('findSourceBtn');
+        }
+        
+        if (demoState.sourceId) {
+          state.sourceId = demoState.sourceId;
+          showStatus('step3', '✅ Source already exists', 'success');
+          showResourceInfo('source-info', { sourceId: demoState.sourceId });
+          enableButton('findDestBtn');
+        }
+        
+        if (demoState.destinationId) {
+          state.destinationId = demoState.destinationId;
+          showStatus('step4', '✅ Destination already exists', 'success');
+          showResourceInfo('destination-info', { destinationId: demoState.destinationId });
+          enableButton('createConnectionBtn');
+        }
+        
+        if (demoState.connectionId) {
+          state.connectionId = demoState.connectionId;
+          showStatus('step5', '✅ Connection already exists', 'success');
+          showResourceInfo('connection-info', { connectionId: demoState.connectionId });
+          enableButton('triggerSyncBtn');
+        }
+      } catch (error) {
+        console.error('Error checking existing state:', error);
+      }
+    }
+    
+    // Initialize on page load
+    window.onload = function() {
+      checkExistingState();
+    };
   </script>
 </body>
 </html>
