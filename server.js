@@ -76,15 +76,12 @@ async function getHubspotSourceDefinitionId() {
   try {
     const token = await getAccessToken();
     const fetch = await getFetch();
-    const response = await fetch(`${AIRBYTE_API_URL}/source_definitions/list`, {
-      method: 'POST',
+    // Attempting to list ALL accessible source definitions globally, without workspaceId
+    const response = await fetch(`${AIRBYTE_API_URL}/source_definitions`, { 
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        workspaceId: WORKSPACE_ID,
-      }),
+      }
     });
     
     if (!response.ok) {
@@ -110,38 +107,6 @@ app.post('/start-hubspot-connection', async (req, res) => {
   try {
     const token = await getAccessToken();
     const fetch = await getFetch();
-    
-    // First, check if the API key is valid
-    const checkResponse = await fetch(`${AIRBYTE_API_URL}/workspaces/get`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        workspaceId: WORKSPACE_ID,
-      }),
-    });
-    
-    if (!checkResponse.ok) {
-      const errorData = await checkResponse.json();
-      console.error('API key validation failed:', errorData);
-      
-      let errorMessage = 'API key validation failed';
-      
-      // Check for specific error types
-      if (errorData.message && errorData.message.includes('Unauthorized')) {
-        errorMessage = 'Your API key is invalid or has expired. Please generate a new API key in Airbyte Cloud.';
-      } else if (errorData.message && errorData.message.includes('not found')) {
-        errorMessage = 'Workspace not found. Please check your workspace ID.';
-      }
-      
-      return res.status(401).json({ 
-        error: errorMessage,
-        details: errorData.message || 'Invalid or expired API key',
-        hint: "You need to generate a new API key in Airbyte Cloud. Go to Settings > Account > Applications"
-      });
-    }
     
     const sourceDefinitionId = await getHubspotSourceDefinitionId();
 
@@ -267,102 +232,55 @@ app.post('/test-connection', async (req, res) => {
     const token = await getAccessToken();
     const fetch = await getFetch();
     
-    // First check if we can list workspaces at all
-    const workspacesResponse = await fetch(`${AIRBYTE_API_URL}/workspaces/list`, {
-      method: 'POST',
+    // Attempt to list workspaces to verify the API key and basic permissions
+    const workspacesResponse = await fetch(`${AIRBYTE_API_URL}/workspaces`, {
+      method: 'GET', // Use GET as per documentation
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({}),
+      }
     });
     
     if (!workspacesResponse.ok) {
       const errorData = await workspacesResponse.json();
       console.error('Failed to list workspaces:', errorData);
       
-      if (errorData.message && errorData.message.includes('Forbidden')) {
-        return res.status(403).json({ 
-          error: 'Permission denied',
-          details: 'Your account does not have access to any workspaces in Airbyte.',
-          message: 'The application was authenticated successfully but lacks permissions to access workspaces.',
-          hint: "Make sure the user who created the application has proper workspace access. You may need to create a new workspace and update the workspace ID."
-        });
-      }
-      
-      return res.status(401).json({ 
-        error: 'Failed to list workspaces',
-        details: errorData.message,
-        hint: "There may be an issue with your Airbyte account permissions."
-      });
-    }
-    
-    // If we can list workspaces, check if we can access the specific workspace
-    const workspacesData = await workspacesResponse.json();
-    const workspaces = workspacesData.workspaces || [];
-    const targetWorkspaceExists = workspaces.some(ws => ws.workspaceId === WORKSPACE_ID);
-    
-    if (!targetWorkspaceExists) {
-      return res.status(404).json({ 
-        error: 'Workspace not found',
-        details: `The configured workspace ID (${WORKSPACE_ID}) was not found in your accessible workspaces.`,
-        availableWorkspaces: workspaces.map(ws => ({
-          id: ws.workspaceId,
-          name: ws.name
-        })),
-        hint: "Update the WORKSPACE_ID in server.js to match one of your accessible workspaces"
-      });
-    }
-    
-    // Now check if we can access the specific workspace
-    const checkResponse = await fetch(`${AIRBYTE_API_URL}/workspaces/get`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        workspaceId: WORKSPACE_ID,
-      }),
-    });
-    
-    if (!checkResponse.ok) {
-      const errorData = await checkResponse.json();
-      console.error('API key validation failed:', errorData);
-      
-      let errorMessage = 'API key validation failed';
-      let statusCode = 401;
-      
-      // Check for specific error types
-      if (errorData.message && errorData.message.includes('Forbidden')) {
-        errorMessage = 'Your account has insufficient permissions for this workspace.';
-        statusCode = 403;
-        return res.status(statusCode).json({ 
-          error: errorMessage,
-          details: errorData.message,
-          hint: "The application was authenticated but lacks permissions for this specific workspace. Try using a different workspace ID from your available workspaces."
-        });
-      } else if (errorData.message && errorData.message.includes('not found')) {
-        errorMessage = 'Workspace not found. Please check your workspace ID.';
-        statusCode = 404;
+      // Determine the status code based on the error
+      let statusCode = workspacesResponse.status;
+      let errorMessage = 'Failed to connect to Airbyte API';
+      let errorDetails = errorData.message || 'Unknown error';
+      let hint = "Check your Client ID, Client Secret, and ensure the application has basic permissions.";
+
+      if (statusCode === 401) {
+        errorMessage = 'Authentication failed';
+        errorDetails = 'Invalid Client ID or Client Secret, or the generated token is invalid/expired.';
+        hint = "Verify your AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in server.js. Try generating a new application token in Airbyte Cloud.";
+      } else if (statusCode === 403) {
+        errorMessage = 'Permission denied';
+        errorDetails = 'The application authenticated successfully but lacks permission to list workspaces.';
+        hint = "Ensure the user account associated with the application has access to at least one workspace in Airbyte Cloud.";
       }
       
       return res.status(statusCode).json({ 
         error: errorMessage,
-        details: errorData.message,
-        hint: "You need to update the workspace ID to one that your account has access to."
+        details: errorDetails,
+        hint: hint
       });
     }
     
-    // API key is valid!
-    const workspaceData = await checkResponse.json();
+    // If the request was successful, the connection is considered valid
+    const workspacesData = await workspacesResponse.json(); // We can still parse it to potentially provide info
+    const availableWorkspaces = workspacesData.data || []; // According to docs, workspaces are in 'data' property for GET /workspaces
+
     res.json({ 
       success: true, 
-      message: 'Connection to Airbyte API successful',
-      workspace: {
-        id: workspaceData.workspaceId,
-        name: workspaceData.name
-      }
+      message: 'Connection to Airbyte API successful. Able to list workspaces.',
+      // Include the list of workspaces in the response, filtering out any potentially malformed entries
+      workspaces: availableWorkspaces
+                     .filter(ws => ws && ws.workspaceId && ws.name) // Ensure ws exists and has id/name
+                     .map(ws => ({ 
+                       id: ws.workspaceId, 
+                       name: ws.name 
+                     }))
     });
   } catch (error) {
     console.error('Error testing connection:', error);
@@ -476,17 +394,13 @@ app.get('/api-key-debug', async (req, res) => {
     };
     
     if (tokenTest.status === 'success') {
-      // Test workspace access
+      // Test workspace access using the correct GET method
       try {
-        const workspaceResponse = await fetch(`${AIRBYTE_API_URL}/workspaces/get`, {
-          method: 'POST',
+        const workspaceResponse = await fetch(`${AIRBYTE_API_URL}/workspaces/${WORKSPACE_ID}`, { // Use GET and include ID in URL path
+          method: 'GET',
           headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            workspaceId: WORKSPACE_ID,
-          }),
+          }
         });
         
         if (workspaceResponse.ok) {
@@ -515,17 +429,14 @@ app.get('/api-key-debug', async (req, res) => {
         };
       }
       
-      // Test source definitions access
+      // Test source definitions access globally
       try {
-        const sourceDefResponse = await fetch(`${AIRBYTE_API_URL}/source_definitions/list`, {
-          method: 'POST',
+        // Attempting GET /source_definitions without workspaceId
+        const sourceDefResponse = await fetch(`${AIRBYTE_API_URL}/source_definitions`, {
+          method: 'GET',
           headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            workspaceId: WORKSPACE_ID,
-          }),
+          }
         });
         
         if (sourceDefResponse.ok) {

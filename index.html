@@ -97,7 +97,11 @@
           throw new Error(data.error || data.details || 'Connection test failed');
         }
         
-        statusElement.textContent = `✅ Connected to Airbyte successfully! Workspace: ${data.workspace.name}`;
+        if (data.workspaces && data.workspaces.length > 0) {
+          statusElement.textContent = `✅ Connected to Airbyte successfully! First workspace: ${data.workspaces[0].name}`;
+        } else {
+          statusElement.textContent = `✅ Connected to Airbyte successfully! (No workspaces found or accessible)`
+        }
         statusElement.className = "success";
       } catch (error) {
         console.error('Error testing connection:', error);
