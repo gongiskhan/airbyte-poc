@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Connect HubSpot with Airbyte</title>
+</head>
+<body>
+  <h1>Connect HubSpot</h1>
+  <button onclick="connectHubspot()">Connect HubSpot</button>
+
+  <script>
+    async function connectHubspot() {
+      const response = await fetch('http://localhost:3000/start-hubspot-connection', {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+      const popup = window.open(data.consentUrl, '_blank', 'width=600,height=800');
+
+      const checkPopup = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkPopup);
+          alert('HubSpot connection flow completed!');
+          // Optionally fetch status here
+        }
+      }, 1000);
+    }
+  </script>
+</body>
+</html>

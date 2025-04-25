@@ -1,0 +1,6 @@
+curl -X POST https://api.airbyte.com/api/v1/applications/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "281b5578-af4c-4b72-a894-587e0e424eda",
+    "client_secret": "mn9HQ77sOfJslURTukKZkrzGHSNAqS0b"
+  }'
