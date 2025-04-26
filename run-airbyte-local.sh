@@ -1,3 +1,51 @@
+#!/bin/bash
+set -e
+
+# This script sets up a self-hosted Airbyte instance and updates the Airbyte POC
+# to work with it on a machine that already has Docker installed.
+
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    echo "Error: Docker is not installed. Please install Docker first."
+    exit 1
+fi
+
+# Check if Docker Compose is installed
+if ! command -v docker-compose &> /dev/null; then
+    echo "Error: Docker Compose is not installed. Please install Docker Compose first."
+    exit 1
+fi
+
+# Create a directory for Airbyte
+echo "Setting up Airbyte..."
+mkdir -p ~/airbyte
+cd ~/airbyte
+
+# Clone Airbyte repository
+if [ ! -d ".git" ]; then
+    echo "Cloning Airbyte repository..."
+    git clone https://github.com/airbytehq/airbyte.git .
+else
+    echo "Airbyte repository already exists, pulling latest changes..."
+    git pull
+fi
+
+# Start Airbyte
+echo "Starting Airbyte..."
+./run-ab-platform.sh &
+
+# Wait for Airbyte to start
+echo "Waiting for Airbyte to start (this may take a few minutes)..."
+echo "You can check the status by visiting http://localhost:8000 in your browser."
+sleep 30
+
+# Return to the airbyte-poc directory
+echo "Setting up Airbyte POC application..."
+cd -
+
+# Update the AirbyteClient.js file
+echo "Updating AirbyteClient.js for self-hosted Airbyte..."
+cat > airbyte-client.js << 'EOL'
 /**
  * Airbyte Embedded API Client for Self-Hosted Airbyte
  * This module provides functions to interact with a self-hosted Airbyte API
@@ -206,3 +254,30 @@ class AirbyteClient {
 }
 
 module.exports = AirbyteClient;
+EOL
+
+# Update server.js to use the self-hosted Airbyte instance
+echo "Updating server.js to work with self-hosted Airbyte..."
+sed -i 's|https://api.airbyte.com/v1|http://localhost:8000/api/v1|g' server.js
+
+# Remove the client ID and secret requirements
+sed -i 's|const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID || .*|const AIRBYTE_CLIENT_ID = null; // Not needed for self-hosted|g' server.js
+sed -i 's|const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET || .*|const AIRBYTE_CLIENT_SECRET = null; // Not needed for self-hosted|g' server.js
+
+# Update the AirbyteClient initialization
+sed -i 's|const airbyteClient = new AirbyteClient({|const airbyteClient = new AirbyteClient({\n  // Using self-hosted Airbyte with no auth\n  useBasicAuth: false,|g' server.js
+
+# Install dependencies
+echo "Installing dependencies..."
+npm install
+
+# Start the application
+echo "Starting the Airbyte POC application..."
+npm start &
+
+echo ""
+echo "Setup complete!"
+echo "Airbyte UI is available at: http://localhost:8000"
+echo "Airbyte POC application is available at: http://localhost:3000"
+echo ""
+echo "You can now use the Airbyte POC application with your self-hosted Airbyte instance."

@@ -8,27 +8,26 @@ const AirbyteClient = require('./airbyte-client');
 dotenv.config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Get Airbyte API credentials from environment variables
-const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID;
-const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET;
+// Get Airbyte API credentials from environment variables or use the ones from the local installation
+const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID || '68eb3177-2afb-44da-851d-a9deb0bb9364';
+const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET || 'AKS7gtga3Sw1HSRI65KtauGPPaeKf0Ju';
+const AIRBYTE_PASSWORD = process.env.AIRBYTE_PASSWORD || '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
 
-// Check if credentials are provided
-if (!AIRBYTE_CLIENT_ID || !AIRBYTE_CLIENT_SECRET) {
-  console.warn('Warning: Airbyte API credentials not found in environment variables. Please set AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in your .env file.');
-}
+console.log('Using self-hosted Airbyte instance at http://localhost:8000');
 
 // Create an instance of our Airbyte client
 const airbyteClient = new AirbyteClient({
-  apiUrl: 'https://api.airbyte.com/v1',
-  clientId: AIRBYTE_CLIENT_ID,
-  clientSecret: AIRBYTE_CLIENT_SECRET
+  apiUrl: 'http://localhost:8000/api/v1',
+  useBasicAuth: true,
+  username: 'airbyte',
+  password: AIRBYTE_PASSWORD
 });
 
 // Stores created resources for the demo
@@ -103,13 +102,7 @@ app.get('/source-definitions', async (req, res) => {
       return res.status(400).json({ error: 'Source name is required' });
     }
 
-    // Check if API credentials are available
-    if (!AIRBYTE_CLIENT_ID || !AIRBYTE_CLIENT_SECRET) {
-      return res.status(401).json({
-        error: 'API credentials not configured',
-        message: 'Please set AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in your .env file'
-      });
-    }
+    // No need to check for API credentials as we're using self-hosted Airbyte
 
     const sourceDefinition = await airbyteClient.getSourceDefinitionByName(name);
 
@@ -326,13 +319,7 @@ app.get('/destination-definitions', async (req, res) => {
       return res.status(400).json({ error: 'Destination name is required' });
     }
 
-    // Check if API credentials are available
-    if (!AIRBYTE_CLIENT_ID || !AIRBYTE_CLIENT_SECRET) {
-      return res.status(401).json({
-        error: 'API credentials not configured',
-        message: 'Please set AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in your .env file'
-      });
-    }
+    // No need to check for API credentials as we're using self-hosted Airbyte
 
     const destinationDefinition = await airbyteClient.getDestinationDefinitionByName(name);
 
