@@ -1,7 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const dotenv = require('dotenv');
 const AirbyteClient = require('./airbyte-client');
+
+// Load environment variables from .env file
+dotenv.config();
 
 const app = express();
 const port = 3000;
@@ -11,9 +15,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Replace these with your Airbyte API credentials
-const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID || '0e24cc41-494a-46e6-a50d-9a4a939d268f';
-const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET || 'uIo9WQfdRzyW3S3iz3AfHEG5TZAKtOLh';
+// Get Airbyte API credentials from environment variables
+const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID;
+const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET;
+
+// Check if credentials are provided
+if (!AIRBYTE_CLIENT_ID || !AIRBYTE_CLIENT_SECRET) {
+  console.warn('Warning: Airbyte API credentials not found in environment variables. Please set AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in your .env file.');
+}
 
 // Create an instance of our Airbyte client
 const airbyteClient = new AirbyteClient({
@@ -38,16 +47,16 @@ app.post('/test-connection', async (req, res) => {
   try {
     // Test connection by listing workspaces
     const workspaces = await airbyteClient.listWorkspaces();
-    
+
     // Return success with the workspaces
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Connection to Airbyte API successful',
       workspaces: workspaces.workspaces || []
     });
   } catch (error) {
     console.error('Error testing connection:', error);
-    res.status(error.status || 500).json({ 
+    res.status(error.status || 500).json({
       error: 'Error testing connection',
       message: error.message || 'Unknown error occurred'
     });
@@ -58,19 +67,19 @@ app.post('/test-connection', async (req, res) => {
 app.post('/create-workspace', async (req, res) => {
   try {
     const { name, email } = req.body;
-    
+
     if (!name) {
       return res.status(400).json({ error: 'Workspace name is required' });
     }
-    
+
     const workspace = await airbyteClient.createWorkspace(
       name,
       email || 'user@example.com'
     );
-    
+
     // Save workspace ID for demo purposes
     demoState.workspaceId = workspace.workspaceId;
-    
+
     res.json({
       success: true,
       message: 'Workspace created successfully',
@@ -78,7 +87,7 @@ app.post('/create-workspace', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating workspace:', error);
-    res.status(error.status || 500).json({ 
+    res.status(error.status || 500).json({
       error: 'Error creating workspace',
       message: error.message || 'Unknown error occurred'
     });
@@ -89,27 +98,49 @@ app.post('/create-workspace', async (req, res) => {
 app.get('/source-definitions', async (req, res) => {
   try {
     const { name } = req.query;
-    
+
     if (!name) {
       return res.status(400).json({ error: 'Source name is required' });
     }
-    
+
+    // Check if API credentials are available
+    if (!AIRBYTE_CLIENT_ID || !AIRBYTE_CLIENT_SECRET) {
+      return res.status(401).json({
+        error: 'API credentials not configured',
+        message: 'Please set AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in your .env file'
+      });
+    }
+
     const sourceDefinition = await airbyteClient.getSourceDefinitionByName(name);
-    
+
     if (!sourceDefinition) {
       return res.status(404).json({ error: `Source definition for '${name}' not found` });
     }
-    
+
     res.json({
       success: true,
       sourceDefinition
     });
   } catch (error) {
     console.error('Error getting source definition:', error);
-    res.status(error.status || 500).json({ 
-      error: 'Error getting source definition',
-      message: error.message || 'Unknown error occurred'
-    });
+
+    // Provide more specific error messages based on status code
+    if (error.status === 403) {
+      res.status(403).json({
+        error: 'Forbidden: Access denied to source definitions',
+        message: 'Your API credentials do not have permission to access source definitions. Please check your Airbyte API credentials and ensure they have the necessary permissions.'
+      });
+    } else if (error.status === 401) {
+      res.status(401).json({
+        error: 'Unauthorized: Invalid API credentials',
+        message: 'Your API credentials are invalid or expired. Please update your AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in the .env file.'
+      });
+    } else {
+      res.status(error.status || 500).json({
+        error: 'Error getting source definition',
+        message: error.message || 'Unknown error occurred'
+      });
+    }
   }
 });
 
@@ -117,21 +148,21 @@ app.get('/source-definitions', async (req, res) => {
 app.post('/initiate-oauth', async (req, res) => {
   try {
     const { workspaceId, sourceDefinitionId } = req.body;
-    
+
     if (!workspaceId) {
       return res.status(400).json({ error: 'Workspace ID is required' });
     }
-    
+
     if (!sourceDefinitionId) {
       return res.status(400).json({ error: 'Source Definition ID is required' });
     }
-    
+
     const oauthResponse = await airbyteClient.initiateOAuth(
       workspaceId,
       sourceDefinitionId,
       CALLBACK_URL
     );
-    
+
     res.json({
       success: true,
       consentUrl: oauthResponse.authorizationUrl || oauthResponse.redirectUrl,
@@ -139,7 +170,7 @@ app.post('/initiate-oauth', async (req, res) => {
     });
   } catch (error) {
     console.error('Error initiating OAuth:', error);
-    res.status(error.status || 500).json({ 
+    res.status(error.status || 500).json({
       error: 'Error initiating OAuth',
       message: error.message || 'Unknown error occurred'
     });
@@ -151,23 +182,23 @@ app.get('/oauth/callback', async (req, res) => {
   const { code, state } = req.query;
   const workspaceId = req.query.workspaceId || demoState.workspaceId;
   const sourceName = req.query.sourceName || 'Source from OAuth';
-  
+
   if (!code) {
     return res.status(400).send('Missing OAuth code in callback parameters');
   }
-  
+
   if (!workspaceId) {
     return res.status(400).send('Missing workspace ID. Please create a workspace first.');
   }
-  
+
   try {
     // Get source definition ID from state or use HubSpot as default for demo
     const sourceDefinitionId = req.query.sourceDefinitionId || state;
-    
+
     if (!sourceDefinitionId) {
       return res.status(400).send('Missing source definition ID in callback state');
     }
-    
+
     // Complete OAuth flow and create source
     const sourceResponse = await airbyteClient.completeOAuth(
       workspaceId,
@@ -177,10 +208,10 @@ app.get('/oauth/callback', async (req, res) => {
       sourceName,
       { start_date: new Date().toISOString().split('T')[0] } // Use today as start date
     );
-    
+
     // Save source ID for demo purposes
     demoState.sourceId = sourceResponse.sourceId;
-    
+
     res.send(`
       <html>
         <head>
@@ -245,33 +276,33 @@ app.get('/oauth/callback', async (req, res) => {
 app.post('/create-destination', async (req, res) => {
   try {
     const { workspaceId, destinationDefinitionId, name, connectionConfiguration } = req.body;
-    
+
     if (!workspaceId) {
       return res.status(400).json({ error: 'Workspace ID is required' });
     }
-    
+
     if (!destinationDefinitionId) {
       return res.status(400).json({ error: 'Destination Definition ID is required' });
     }
-    
+
     if (!name) {
       return res.status(400).json({ error: 'Destination name is required' });
     }
-    
+
     if (!connectionConfiguration) {
       return res.status(400).json({ error: 'Connection configuration is required' });
     }
-    
+
     const destination = await airbyteClient.createDestination(
       workspaceId,
       destinationDefinitionId,
       name,
       connectionConfiguration
     );
-    
+
     // Save destination ID for demo purposes
     demoState.destinationId = destination.destinationId;
-    
+
     res.json({
       success: true,
       message: 'Destination created successfully',
@@ -279,7 +310,7 @@ app.post('/create-destination', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating destination:', error);
-    res.status(error.status || 500).json({ 
+    res.status(error.status || 500).json({
       error: 'Error creating destination',
       message: error.message || 'Unknown error occurred'
     });
@@ -290,27 +321,49 @@ app.post('/create-destination', async (req, res) => {
 app.get('/destination-definitions', async (req, res) => {
   try {
     const { name } = req.query;
-    
+
     if (!name) {
       return res.status(400).json({ error: 'Destination name is required' });
     }
-    
+
+    // Check if API credentials are available
+    if (!AIRBYTE_CLIENT_ID || !AIRBYTE_CLIENT_SECRET) {
+      return res.status(401).json({
+        error: 'API credentials not configured',
+        message: 'Please set AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in your .env file'
+      });
+    }
+
     const destinationDefinition = await airbyteClient.getDestinationDefinitionByName(name);
-    
+
     if (!destinationDefinition) {
       return res.status(404).json({ error: `Destination definition for '${name}' not found` });
     }
-    
+
     res.json({
       success: true,
       destinationDefinition
     });
   } catch (error) {
     console.error('Error getting destination definition:', error);
-    res.status(error.status || 500).json({ 
-      error: 'Error getting destination definition',
-      message: error.message || 'Unknown error occurred'
-    });
+
+    // Provide more specific error messages based on status code
+    if (error.status === 403) {
+      res.status(403).json({
+        error: 'Forbidden: Access denied to destination definitions',
+        message: 'Your API credentials do not have permission to access destination definitions. Please check your Airbyte API credentials and ensure they have the necessary permissions.'
+      });
+    } else if (error.status === 401) {
+      res.status(401).json({
+        error: 'Unauthorized: Invalid API credentials',
+        message: 'Your API credentials are invalid or expired. Please update your AIRBYTE_CLIENT_ID and AIRBYTE_CLIENT_SECRET in the .env file.'
+      });
+    } else {
+      res.status(error.status || 500).json({
+        error: 'Error getting destination definition',
+        message: error.message || 'Unknown error occurred'
+      });
+    }
   }
 });
 
@@ -318,29 +371,29 @@ app.get('/destination-definitions', async (req, res) => {
 app.post('/create-connection', async (req, res) => {
   try {
     const { sourceId, destinationId, name, config } = req.body;
-    
+
     if (!sourceId) {
       return res.status(400).json({ error: 'Source ID is required' });
     }
-    
+
     if (!destinationId) {
       return res.status(400).json({ error: 'Destination ID is required' });
     }
-    
+
     if (!name) {
       return res.status(400).json({ error: 'Connection name is required' });
     }
-    
+
     const connection = await airbyteClient.createConnection(
       sourceId,
       destinationId,
       name,
       config
     );
-    
+
     // Save connection ID for demo purposes
     demoState.connectionId = connection.connectionId;
-    
+
     res.json({
       success: true,
       message: 'Connection created successfully',
@@ -348,7 +401,7 @@ app.post('/create-connection', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating connection:', error);
-    res.status(error.status || 500).json({ 
+    res.status(error.status || 500).json({
       error: 'Error creating connection',
       message: error.message || 'Unknown error occurred'
     });
@@ -359,13 +412,13 @@ app.post('/create-connection', async (req, res) => {
 app.post('/trigger-sync', async (req, res) => {
   try {
     const { connectionId } = req.body;
-    
+
     if (!connectionId) {
       return res.status(400).json({ error: 'Connection ID is required' });
     }
-    
+
     const job = await airbyteClient.triggerSync(connectionId);
-    
+
     res.json({
       success: true,
       message: 'Sync job triggered successfully',
@@ -373,7 +426,7 @@ app.post('/trigger-sync', async (req, res) => {
     });
   } catch (error) {
     console.error('Error triggering sync:', error);
-    res.status(error.status || 500).json({ 
+    res.status(error.status || 500).json({
       error: 'Error triggering sync',
       message: error.message || 'Unknown error occurred'
     });
