@@ -10,7 +10,7 @@ async function getFetch() {
 
 class AirbyteClient {
   constructor(config) {
-    this.apiUrl = config.apiUrl || 'http://localhost:8000/api/v1';
+    this.apiUrl = config.apiUrl || 'http://scuver.services:8000/api/v1';
     this.useBasicAuth = config.useBasicAuth !== undefined ? config.useBasicAuth : false;
     this.username = config.username;
     this.password = config.password;
@@ -22,7 +22,7 @@ class AirbyteClient {
   async request(endpoint, method = 'GET', body = null) {
     try {
       const fetch = await getFetch();
-      
+
       const options = {
         method,
         headers: {
@@ -31,21 +31,21 @@ class AirbyteClient {
           'User-Agent': 'AirbyteEmbeddedPOC/1.0'
         }
       };
-      
+
       // Add basic auth if configured
       if (this.useBasicAuth && this.username && this.password) {
         const base64Credentials = Buffer.from(`${this.username}:${this.password}`).toString('base64');
         options.headers['Authorization'] = `Basic ${base64Credentials}`;
       }
-      
+
       if (body) {
         options.body = JSON.stringify(body);
       }
-      
+
       const url = `${this.apiUrl}${endpoint}`;
       console.log(`Making request to: ${url}`);
       const response = await fetch(url, options);
-      
+
       let data;
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
@@ -53,7 +53,7 @@ class AirbyteClient {
       } else {
         data = await response.text();
       }
-      
+
       if (!response.ok) {
         throw {
           status: response.status,
@@ -61,7 +61,7 @@ class AirbyteClient {
           data
         };
       }
-      
+
       return data;
     } catch (error) {
       console.error(`API request failed for ${endpoint}:`, error);
@@ -134,7 +134,7 @@ class AirbyteClient {
       schedule: { scheduleType: "manual" },
       dataResidency: "auto"
     };
-    
+
     return this.request('/connections', 'POST', {
       ...defaultConfig,
       ...config,
@@ -164,13 +164,13 @@ class AirbyteClient {
       if (!workspaces || !workspaces.workspaces || workspaces.workspaces.length === 0) {
         throw new Error('No workspaces found');
       }
-      
+
       // Use the first workspace
       const workspaceId = workspaces.workspaces[0].workspaceId;
-      
+
       // Get source definitions for this workspace
       const sourceDefinitions = await this.request(`/workspaces/${workspaceId}/source_definitions`);
-      return sourceDefinitions.sourceDefinitions.find(def => 
+      return sourceDefinitions.sourceDefinitions.find(def =>
         def.name.toLowerCase().includes(name.toLowerCase())
       );
     } catch (error) {
@@ -189,13 +189,13 @@ class AirbyteClient {
       if (!workspaces || !workspaces.workspaces || workspaces.workspaces.length === 0) {
         throw new Error('No workspaces found');
       }
-      
+
       // Use the first workspace
       const workspaceId = workspaces.workspaces[0].workspaceId;
-      
+
       // Get destination definitions for this workspace
       const destinationDefinitions = await this.request(`/workspaces/${workspaceId}/destination_definitions`);
-      return destinationDefinitions.destinationDefinitions.find(def => 
+      return destinationDefinitions.destinationDefinitions.find(def =>
         def.name.toLowerCase().includes(name.toLowerCase())
       );
     } catch (error) {

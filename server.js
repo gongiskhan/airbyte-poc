@@ -20,11 +20,11 @@ const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID || '68eb3177-2afb-44da-8
 const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET || 'AKS7gtga3Sw1HSRI65KtauGPPaeKf0Ju';
 const AIRBYTE_PASSWORD = process.env.AIRBYTE_PASSWORD || '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
 
-console.log('Using self-hosted Airbyte instance at http://localhost:8000');
+console.log('Using self-hosted Airbyte instance at http://scuver.services:8000');
 
 // Create an instance of our Airbyte client
 const airbyteClient = new AirbyteClient({
-  apiUrl: 'http://localhost:8000/api/v1',
+  apiUrl: 'http://scuver.services:8000/api/v1',
   useBasicAuth: true,
   username: 'airbyte',
   password: AIRBYTE_PASSWORD
@@ -39,7 +39,7 @@ const demoState = {
 };
 
 // For OAuth callbacks
-const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3000/oauth/callback';
+const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3001/oauth/callback';
 
 // Step 1: Test the Airbyte connection
 app.post('/test-connection', async (req, res) => {
