@@ -10,10 +10,39 @@ async function getFetch() {
 
 class AirbyteClient {
   constructor(config) {
-    this.apiUrl = config.apiUrl || 'http://scuver.services:8000/api/v1';
-    this.useBasicAuth = config.useBasicAuth !== undefined ? config.useBasicAuth : false;
-    this.username = config.username;
-    this.password = config.password;
+    // Use the correct API path for OSS users
+    this.apiUrl = config.apiUrl || 'http://scuver.services:8000/api/public/v1';
+    this.clientId = config.clientId;
+    this.clientSecret = config.clientSecret;
+    this.email = config.email || 'goncalo.p.gomes@gmail.com';
+    this.password = config.password || '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
+
+    // Use a hardcoded token for testing
+    this.accessToken = config.token;
+    this.tokenExpiry = new Date(Date.now() + (24 * 60 * 60 * 1000)); // 24 hours from now
+  }
+
+  /**
+   * Get an authentication token
+   */
+  async getAuthToken() {
+    try {
+      // Check if we already have a valid token
+      if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry) {
+        console.log('Using existing token:', this.accessToken);
+        return this.accessToken;
+      }
+
+      // For now, we're using a token that was generated from the UI
+      // In a production environment, you would implement proper token generation
+      console.log('No valid token available. Please generate a token from the Airbyte UI.');
+
+      // Return null to indicate that no token is available
+      return null;
+    } catch (error) {
+      console.error('Error getting authentication token:', error);
+      throw error;
+    }
   }
 
   /**
@@ -22,6 +51,14 @@ class AirbyteClient {
   async request(endpoint, method = 'GET', body = null) {
     try {
       const fetch = await getFetch();
+
+      // Get authentication token
+      let token;
+      try {
+        token = await this.getAuthToken();
+      } catch (authError) {
+        console.warn('Failed to get auth token, proceeding without authentication:', authError.message);
+      }
 
       const options = {
         method,
@@ -32,10 +69,15 @@ class AirbyteClient {
         }
       };
 
-      // Add basic auth if configured
-      if (this.useBasicAuth && this.username && this.password) {
-        const base64Credentials = Buffer.from(`${this.username}:${this.password}`).toString('base64');
-        options.headers['Authorization'] = `Basic ${base64Credentials}`;
+      // Use Bearer token authentication
+      if (this.accessToken) {
+        options.headers['Authorization'] = `Bearer ${this.accessToken}`;
+        console.log('Using Bearer token authentication');
+      } else if (token) {
+        options.headers['Authorization'] = `Bearer ${token}`;
+        console.log('Using Bearer token from getAuthToken');
+      } else {
+        console.log('No authentication token available');
       }
 
       if (body) {
@@ -55,6 +97,7 @@ class AirbyteClient {
       }
 
       if (!response.ok) {
+        console.log('Full error response:', JSON.stringify(data, null, 2));
         throw {
           status: response.status,
           message: data.message || 'Unknown error',

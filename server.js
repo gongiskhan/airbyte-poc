@@ -15,20 +15,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Get Airbyte API credentials from environment variables or use the ones from the local installation
-const AIRBYTE_CLIENT_ID = process.env.AIRBYTE_CLIENT_ID || '68eb3177-2afb-44da-851d-a9deb0bb9364';
-const AIRBYTE_CLIENT_SECRET = process.env.AIRBYTE_CLIENT_SECRET || 'AKS7gtga3Sw1HSRI65KtauGPPaeKf0Ju';
-const AIRBYTE_PASSWORD = process.env.AIRBYTE_PASSWORD || '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
+// Airbyte API credentials
+const AIRBYTE_EMAIL = 'goncalo.p.gomes@gmail.com';
+const AIRBYTE_PASSWORD = '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
+const AIRBYTE_CLIENT_ID = '68eb3177-2afb-44da-851d-a9deb0bb9364';
+const AIRBYTE_CLIENT_SECRET = 'AKS7gtga3Sw1HSRI65KtauGPPaeKf0Ju';
+// Token generated from the Airbyte UI
+const AIRBYTE_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vYWlyYnl0ZS1hYmN0bC1haXJieXRlLXdlYmFwcC1zdmM6ODAiLCJhdWQiOiJhaXJieXRlLXNlcnZlciIsInN1YiI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsImV4cCI6MTc0NTczMDk4MSwicm9sZXMiOlsiQVVUSEVOVElDQVRFRF9VU0VSIiwiUkVBREVSIiwiRURJVE9SIiwiQURNSU4iLCJXT1JLU1BBQ0VfUkVBREVSIiwiV09SS1NQQUNFX1JVTk5FUiIsIldPUktTUEFDRV9FRElUT1IiLCJXT1JLU1BBQ0VfQURNSU4iLCJPUkdBTklaQVRJT05fTUVNQkVSIiwiT1JHQU5JWkFUSU9OX1JFQURFUiIsIk9SR0FOSVpBVElPTl9SVU5ORVIiLCJPUkdBTklaQVRJT05fRURJVE9SIiwiT1JHQU5JWkFUSU9OX0FETUlOIl19.jcgaMw3S2grqGSnOI4_Be3qbY065h1xfmLIxTcZPIBo';
 
 console.log('Using self-hosted Airbyte instance at http://scuver.services:8000');
 
-// Create an instance of our Airbyte client
+// Create an instance of our Airbyte client with the correct API path for OSS users
 const airbyteClient = new AirbyteClient({
-  apiUrl: 'http://scuver.services:8000/api/v1',
-  useBasicAuth: true,
-  username: 'airbyte',
-  password: AIRBYTE_PASSWORD
+  apiUrl: 'http://scuver.services:8000/api/public/v1',
+  clientId: AIRBYTE_CLIENT_ID,
+  clientSecret: AIRBYTE_CLIENT_SECRET,
+  email: AIRBYTE_EMAIL,
+  password: AIRBYTE_PASSWORD,
+  token: AIRBYTE_TOKEN
 });
+
+console.log('Using token-based authentication with a token generated from the Airbyte UI');
 
 // Stores created resources for the demo
 const demoState = {
