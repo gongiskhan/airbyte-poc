@@ -4,6 +4,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const AirbyteClient = require('./airbyte-client');
 const hubspotPrivateApp = require('./hubspot-private-app');
+const hubspotOAuth = require('./hubspot-oauth');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -220,7 +221,39 @@ app.post('/initiate-oauth', async (req, res) => {
 
     console.log(`Initiating OAuth for workspace ${workspaceId} and source definition ${sourceDefinitionId}`);
 
-    // Try multiple approaches to initiate OAuth
+    // Check if this is HubSpot source definition
+    const isHubSpot = sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c';
+
+    // For HubSpot, use direct OAuth implementation
+    if (isHubSpot) {
+      console.log('Using direct HubSpot OAuth implementation...');
+
+      // Get HubSpot client ID from environment variables
+      const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
+
+      if (!hubspotClientId) {
+        return res.status(400).json({
+          error: 'HubSpot Client ID is required',
+          message: 'Please set HUBSPOT_CLIENT_ID in your .env file'
+        });
+      }
+
+      // Generate HubSpot OAuth URL
+      const consentUrl = hubspotOAuth.generateHubSpotOAuthUrl(
+        hubspotClientId,
+        CALLBACK_URL,
+        workspaceId,
+        sourceDefinitionId
+      );
+
+      return res.json({
+        success: true,
+        consentUrl,
+        oauthResponse: { authorizationUrl: consentUrl }
+      });
+    }
+
+    // For other sources, try multiple approaches to initiate OAuth
     let oauthResponse;
     let error;
 
@@ -461,83 +494,122 @@ app.get('/oauth/callback', async (req, res) => {
 
     console.log(`Completing OAuth for workspace ${workspaceId} and source definition ${sourceDefinitionId}`);
 
-    // Try multiple approaches to complete OAuth
+    // Check if this is HubSpot source definition
+    const isHubSpot = sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c';
+
     let sourceResponse;
-    let error;
 
-    // Approach 1: Try the Airbyte client's completeOAuth method
-    try {
-      console.log('Trying Airbyte client completeOAuth method...');
-      sourceResponse = await airbyteClient.completeOAuth(
-        workspaceId,
-        sourceDefinitionId,
-        CALLBACK_URL,
-        { code, state },
-        sourceName,
-        { start_date: new Date().toISOString().split('T')[0] } // Use today as start date
-      );
-    } catch (err1) {
-      console.log('Airbyte client completeOAuth method failed:', err1.message);
-      error = err1;
+    // For HubSpot, use direct OAuth implementation
+    if (isHubSpot) {
+      console.log('Using direct HubSpot OAuth implementation for callback...');
 
-      // Approach 2: Try direct API calls with different endpoint formats
+      // Get HubSpot client ID and secret from environment variables
+      const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
+      const hubspotClientSecret = process.env.HUBSPOT_CLIENT_SECRET || AIRBYTE_CLIENT_SECRET;
+
+      if (!hubspotClientId || !hubspotClientSecret) {
+        return res.status(400).send('Missing HubSpot Client ID or Client Secret. Please set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET in your .env file.');
+      }
+
       try {
-        console.log('Trying direct API calls with different endpoint formats...');
-        const fetch = await import('node-fetch');
+        // Exchange the code for tokens
+        console.log('Exchanging code for HubSpot tokens...');
+        const tokens = await hubspotOAuth.exchangeCodeForTokens(
+          hubspotClientId,
+          hubspotClientSecret,
+          CALLBACK_URL,
+          code
+        );
 
-        // Try multiple endpoint formats
-        const endpoints = [
-          `/sources/complete_oauth`,
-          `/v1/sources/complete_oauth`,
-          `/workspaces/${workspaceId}/sources/complete_oauth`,
-          `/source_definitions/${sourceDefinitionId}/oauth/complete`
-        ];
+        console.log('Successfully exchanged code for tokens');
 
-        for (const endpoint of endpoints) {
-          try {
-            console.log(`Trying endpoint: ${endpoint}`);
+        // Create the source using the tokens
+        sourceResponse = await hubspotOAuth.createHubSpotSourceWithOAuth(
+          airbyteClient,
+          workspaceId,
+          sourceDefinitionId,
+          sourceName,
+          tokens
+        );
 
-            const url = `${airbyteClient.apiUrl}${endpoint}`;
-            const options = {
-              method: 'POST',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                workspaceId,
-                sourceDefinitionId,
-                redirectUrl: CALLBACK_URL,
-                queryParams: { code, state },
-                sourceName,
-                oAuthInputConfiguration: {
-                  start_date: new Date().toISOString().split('T')[0]
-                }
-              })
-            };
+        console.log('Successfully created HubSpot source with OAuth');
+      } catch (hubspotError) {
+        console.error('Error with direct HubSpot OAuth:', hubspotError);
+        throw hubspotError;
+      }
+    } else {
+      // For other sources, try multiple approaches to complete OAuth
+      let error;
 
-            console.log(`Making direct request to: ${url}`);
-            const directResponse = await fetch.default(url, options);
+      // Approach 1: Try the Airbyte client's completeOAuth method
+      try {
+        console.log('Trying Airbyte client completeOAuth method...');
+        sourceResponse = await airbyteClient.completeOAuth(
+          workspaceId,
+          sourceDefinitionId,
+          CALLBACK_URL,
+          { code, state },
+          sourceName,
+          { start_date: new Date().toISOString().split('T')[0] } // Use today as start date
+        );
+      } catch (err1) {
+        console.log('Airbyte client completeOAuth method failed:', err1.message);
+        error = err1;
 
-            if (directResponse.ok) {
-              sourceResponse = await directResponse.json();
-              console.log(`Direct API call to ${endpoint} successful!`);
-              break;
-            } else {
-              console.log(`Direct API call to ${endpoint} failed: ${directResponse.status} ${directResponse.statusText}`);
+        // Approach 2: Try direct API calls with different endpoint formats
+        try {
+          console.log('Trying direct API calls with different endpoint formats...');
+          const fetch = await import('node-fetch');
+
+          // Try multiple endpoint formats
+          const endpoints = [
+            `/sources/complete_oauth`,
+            `/v1/sources/complete_oauth`,
+            `/workspaces/${workspaceId}/sources/complete_oauth`,
+            `/source_definitions/${sourceDefinitionId}/oauth/complete`
+          ];
+
+          for (const endpoint of endpoints) {
+            try {
+              console.log(`Trying endpoint: ${endpoint}`);
+
+              const url = `${airbyteClient.apiUrl}${endpoint}`;
+              const options = {
+                method: 'POST',
+                headers: {
+                  'Accept': 'application/json',
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  workspaceId,
+                  sourceDefinitionId,
+                  redirectUrl: CALLBACK_URL,
+                  queryParams: { code, state },
+                  sourceName,
+                  oAuthInputConfiguration: {
+                    start_date: new Date().toISOString().split('T')[0]
+                  }
+                })
+              };
+
+              console.log(`Making direct request to: ${url}`);
+              const directResponse = await fetch.default(url, options);
+
+              if (directResponse.ok) {
+                sourceResponse = await directResponse.json();
+                console.log(`Direct API call to ${endpoint} successful!`);
+                break;
+              } else {
+                console.log(`Direct API call to ${endpoint} failed: ${directResponse.status} ${directResponse.statusText}`);
+              }
+            } catch (endpointError) {
+              console.log(`Error with endpoint ${endpoint}:`, endpointError.message);
             }
-          } catch (endpointError) {
-            console.log(`Error with endpoint ${endpoint}:`, endpointError.message);
           }
-        }
 
-        // If all endpoint attempts fail, try to create the source directly
-        if (!sourceResponse) {
-          console.log('All endpoint attempts failed, trying to create source directly...');
-
-          // For HubSpot, create a source configuration with the OAuth code
-          if (sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c') {
-            console.log('Creating HubSpot source directly with OAuth code...');
+          // If all endpoint attempts fail, try to create the source directly
+          if (!sourceResponse) {
+            console.log('All endpoint attempts failed, trying to create source directly...');
 
             // Create a source configuration with the OAuth code
             const sourceConfig = {
@@ -593,15 +665,13 @@ app.get('/oauth/callback', async (req, res) => {
                 sourceConfig
               );
             }
-          } else {
-            throw new Error('All OAuth completion approaches failed');
           }
-        }
-      } catch (err2) {
-        console.log('Direct API calls failed:', err2.message);
+        } catch (err2) {
+          console.log('Direct API calls failed:', err2.message);
 
-        // If all approaches fail, throw the original error
-        throw error;
+          // If all approaches fail, throw the original error
+          throw error;
+        }
       }
     }
 

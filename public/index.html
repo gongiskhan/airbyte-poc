@@ -226,8 +226,8 @@
     <div class="form-group" style="margin-top: 20px;">
       <label for="authType">Authentication Type:</label>
       <select id="authType" onchange="toggleAuthFields()">
-        <option value="oauth">OAuth</option>
         <option value="private-app">Private App</option>
+        <option value="oauth">OAuth (Not recommended for self-hosted)</option>
       </select>
     </div>
 
@@ -282,6 +282,10 @@
 
     <!-- OAuth Authentication Fields -->
     <div id="oauthFields">
+      <div class="alert" style="background-color: #ffcccc; color: #cc0000;">
+        <strong>Warning:</strong> OAuth authentication is not fully supported in self-hosted Airbyte instances due to permission restrictions.
+        We recommend using Private App authentication instead for self-hosted instances.
+      </div>
       <div class="form-group" id="oauth-section">
         <button onclick="initiateOAuth()" id="initiateOAuthBtn" disabled>Connect via OAuth</button>
       </div>
@@ -816,6 +820,9 @@
     // Initialize on page load
     window.onload = function() {
       checkExistingState();
+      // Set Private App as the default authentication method
+      document.getElementById('authType').value = 'private-app';
+      toggleAuthFields();
     };
   </script>
 </body>
