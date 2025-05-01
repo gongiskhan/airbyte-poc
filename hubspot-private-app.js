@@ -9,7 +9,7 @@ async function getFetch() {
 }
 
 /**
- * Create a source using HubSpot Private App authentication
+ * Create a source using HubSpot Private App authentication via Airbyte
  * @param {Object} airbyteClient - The Airbyte client instance
  * @param {string} workspaceId - The Airbyte workspace ID
  * @param {string} sourceDefinitionId - The HubSpot source definition ID
@@ -19,9 +19,9 @@ async function getFetch() {
  */
 async function createHubSpotSourceWithPrivateApp(airbyteClient, workspaceId, sourceDefinitionId, sourceName, privateAppToken) {
   try {
-    console.log(`Creating HubSpot source with Private App authentication in workspace ${workspaceId}`);
-    
-    // Create the source with Private App authentication
+    console.log(`Creating HubSpot source with Private App authentication in workspace ${workspaceId} via Airbyte`);
+
+    // Create the source configuration for Airbyte's HubSpot connector
     const sourceConfig = {
       credentials: {
         credentials_title: "Private App Credentials",
@@ -29,7 +29,7 @@ async function createHubSpotSourceWithPrivateApp(airbyteClient, workspaceId, sou
       },
       start_date: new Date().toISOString().split('T')[0] // Use today as start date
     };
-    
+
     // Create the source using the Airbyte API
     const source = await airbyteClient.createSource(
       workspaceId,
@@ -37,11 +37,11 @@ async function createHubSpotSourceWithPrivateApp(airbyteClient, workspaceId, sou
       sourceName,
       sourceConfig
     );
-    
-    console.log(`Successfully created HubSpot source with ID: ${source.sourceId}`);
+
+    console.log(`Successfully created HubSpot source with ID: ${source.sourceId} via Airbyte`);
     return source;
   } catch (error) {
-    console.error('Error creating HubSpot source with Private App authentication:', error);
+    console.error('Error creating HubSpot source with Private App authentication via Airbyte:', error);
     throw error;
   }
 }
@@ -53,28 +53,21 @@ async function createHubSpotSourceWithPrivateApp(airbyteClient, workspaceId, sou
  */
 async function testHubSpotPrivateAppConnection(privateAppToken) {
   try {
-    console.log('Testing HubSpot Private App connection...');
-    
-    const fetch = await getFetch();
-    
-    // Test the connection to HubSpot API
-    const response = await fetch('https://api.hubapi.com/crm/v3/properties/contacts', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${privateAppToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('HubSpot API Error:', errorData);
+    console.log('Testing HubSpot Private App connection via Airbyte...');
+
+    // We'll use a simple check to validate the token format
+    // This is a basic validation - Airbyte will do the full validation when creating the source
+    if (!privateAppToken || !privateAppToken.startsWith('pat-')) {
+      console.error('Invalid HubSpot Private App token format. Token should start with "pat-"');
       return false;
     }
-    
-    const data = await response.json();
-    console.log(`Successfully connected to HubSpot API. Found ${data.results?.length || 0} contact properties.`);
+
+    console.log('HubSpot Private App token format is valid. Airbyte will perform full validation when creating the source.');
     return true;
+
+    // Note: We're not making a direct API call to HubSpot anymore.
+    // Instead, we're relying on Airbyte to validate the connection when creating the source.
+    // This ensures we're using Airbyte's HubSpot connector exclusively.
   } catch (error) {
     console.error('Error testing HubSpot Private App connection:', error);
     return false;

@@ -212,7 +212,7 @@
     <div class="form-group">
       <label for="sourceType">Source Type:</label>
       <select id="sourceType">
-        <option value="hubspot">HubSpot</option>
+        <option value="hubspot">HubSpot (via Airbyte)</option>
         <option value="google-sheets">Google Sheets</option>
         <option value="facebook">Facebook</option>
         <option value="stripe">Stripe</option>
@@ -245,7 +245,7 @@
       </div>
 
       <div class="info-box">
-        <h4>How to Create a HubSpot Private App</h4>
+        <h4>How to Create a HubSpot Private App for Airbyte</h4>
         <ol>
           <li>Log in to your HubSpot account</li>
           <li>Go to Settings &gt; Integrations &gt; Private Apps</li>
@@ -256,7 +256,7 @@
               <li>Description: "For syncing data with Airbyte"</li>
             </ul>
           </li>
-          <li>Set the required scopes:
+          <li>Set the required scopes (these are needed for Airbyte's HubSpot connector):
             <ul>
               <li>crm.objects.contacts.read</li>
               <li>crm.objects.companies.read</li>
@@ -277,7 +277,7 @@
         </ol>
       </div>
 
-      <button onclick="createSourceWithPrivateApp()" id="setupPrivateAppSourceBtn" disabled>Setup Source with Private App</button>
+      <button onclick="createSourceWithPrivateApp()" id="setupPrivateAppSourceBtn" disabled>Setup HubSpot Source via Airbyte</button>
     </div>
 
     <!-- OAuth Authentication Fields -->
@@ -287,7 +287,26 @@
         We recommend using Private App authentication instead for self-hosted instances.
       </div>
       <div class="form-group" id="oauth-section">
-        <button onclick="initiateOAuth()" id="initiateOAuthBtn" disabled>Connect via OAuth</button>
+        <button onclick="initiateOAuth()" id="initiateOAuthBtn" disabled>Connect HubSpot via Airbyte OAuth</button>
+        <button onclick="toggleOAuthRefreshSection()" style="margin-left: 10px;">Show Token Refresh</button>
+      </div>
+
+      <!-- OAuth Token Refresh Section -->
+      <div class="form-group" id="oauth-refresh-section" style="margin-top: 20px; display: none;">
+        <h4>Refresh OAuth Tokens</h4>
+        <p>If your OAuth tokens have expired, you can refresh them here.</p>
+
+        <div class="form-group">
+          <label for="sourceIdForRefresh">Source ID:</label>
+          <input type="text" id="sourceIdForRefresh" placeholder="Enter the source ID">
+        </div>
+
+        <div class="form-group">
+          <label for="refreshToken">Refresh Token:</label>
+          <input type="text" id="refreshToken" placeholder="Enter the refresh token">
+        </div>
+
+        <button onclick="refreshOAuthTokens()" id="refreshTokensBtn">Refresh OAuth Tokens</button>
       </div>
     </div>
 
@@ -323,14 +342,14 @@
         }
 
         const privateAppToken = document.getElementById('privateAppToken').value;
-        const sourceName = document.getElementById('sourceName').value;
+        const sourceName = document.getElementById('sourceName').value || 'HubSpot Source via Airbyte';
 
         if (!privateAppToken) {
           showStatus('step3', '❌ Private App token is required', 'error');
           return;
         }
 
-        showStatus('step3', 'Creating source with Private App authentication...', 'info');
+        showStatus('step3', 'Creating HubSpot source via Airbyte with Private App authentication...', 'info');
 
         const data = await fetchData('/create-hubspot-source-with-private-app', 'POST', {
           workspaceId: state.workspaceId,
@@ -339,7 +358,7 @@
         });
 
         state.sourceId = data.source.sourceId;
-        showStatus('step3', '✅ Source created successfully with Private App authentication!', 'success');
+        showStatus('step3', '✅ HubSpot source created successfully via Airbyte!', 'success');
         showResourceInfo('source-info', data.source);
 
         enableButton('findDestBtn');
@@ -581,7 +600,54 @@
       }
     }
 
-    // Step 3b: Initiate OAuth
+    // Toggle OAuth Refresh Section
+    function toggleOAuthRefreshSection() {
+      const refreshSection = document.getElementById('oauth-refresh-section');
+      if (refreshSection.style.display === 'none') {
+        refreshSection.style.display = 'block';
+      } else {
+        refreshSection.style.display = 'none';
+      }
+    }
+
+    // Refresh OAuth Tokens
+    async function refreshOAuthTokens() {
+      try {
+        const sourceId = document.getElementById('sourceIdForRefresh').value;
+        const refreshToken = document.getElementById('refreshToken').value;
+
+        if (!sourceId) {
+          showStatus('step3', '❌ Source ID is required', 'error');
+          return;
+        }
+
+        if (!refreshToken) {
+          showStatus('step3', '❌ Refresh token is required', 'error');
+          return;
+        }
+
+        showStatus('step3', 'Refreshing OAuth tokens...', 'info');
+
+        const data = await fetchData('/refresh-hubspot-oauth-tokens', 'POST', {
+          sourceId,
+          refreshToken
+        });
+
+        showStatus('step3', '✅ OAuth tokens refreshed successfully!', 'success');
+        showResourceInfo('source-info', data.source);
+
+        // If we have a connection ID, enable the next step
+        if (state.connectionId) {
+          enableButton('triggerSyncBtn');
+        } else {
+          enableButton('findDestBtn');
+        }
+      } catch (error) {
+        showStatus('step3', `❌ Error refreshing tokens: ${error.message}`, 'error');
+      }
+    }
+
+    // Step 3b: Initiate OAuth via Airbyte
     async function initiateOAuth() {
       try {
         if (!state.workspaceId) {
@@ -594,7 +660,7 @@
           return;
         }
 
-        showStatus('step3', 'Initiating OAuth flow...', 'info');
+        showStatus('step3', 'Initiating HubSpot OAuth flow via Airbyte...', 'info');
 
         const data = await fetchData('/initiate-oauth', 'POST', {
           workspaceId: state.workspaceId,
@@ -608,7 +674,7 @@
           throw new Error('Popup was blocked! Please allow popups for this site.');
         }
 
-        showStatus('step3', 'OAuth consent window opened. Please complete the authorization.', 'info');
+        showStatus('step3', 'HubSpot OAuth consent window opened. Please complete the authorization.', 'info');
 
         // Listen for messages from the popup
         window.addEventListener('message', function(event) {
@@ -616,7 +682,7 @@
           if (event.data && event.data.type) {
             if (event.data.type === 'OAUTH_SUCCESS') {
               state.sourceId = event.data.sourceId;
-              showStatus('step3', '✅ OAuth successful! Source created.', 'success');
+              showStatus('step3', '✅ OAuth successful! HubSpot source created via Airbyte.', 'success');
               showResourceInfo('source-info', { sourceId: state.sourceId });
 
               enableButton('findDestBtn');

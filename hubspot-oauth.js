@@ -33,14 +33,14 @@ function generateHubSpotOAuthUrl(clientId, redirectUrl, workspaceId, sourceDefin
     "sales-email-read",
     "automation"
   ];
-  
+
   // Create the OAuth URL
   const scopesParam = encodeURIComponent(scopes.join(' '));
   const state = encodeURIComponent(JSON.stringify({
     workspaceId,
     sourceDefinitionId
   }));
-  
+
   return `https://app.hubspot.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUrl)}&scope=${scopesParam}&state=${state}`;
 }
 
@@ -55,7 +55,7 @@ function generateHubSpotOAuthUrl(clientId, redirectUrl, workspaceId, sourceDefin
 async function exchangeCodeForTokens(clientId, clientSecret, redirectUrl, code) {
   try {
     const fetch = await getFetch();
-    
+
     const response = await fetch('https://api.hubapi.com/oauth/v1/token', {
       method: 'POST',
       headers: {
@@ -69,15 +69,54 @@ async function exchangeCodeForTokens(clientId, clientSecret, redirectUrl, code) 
         code: code
       })
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(`Failed to exchange code for tokens: ${errorData.message || response.statusText}`);
     }
-    
+
     return await response.json();
   } catch (error) {
     console.error('Error exchanging code for tokens:', error);
+    throw error;
+  }
+}
+
+/**
+ * Refresh an access token using a refresh token
+ * @param {string} clientId - HubSpot OAuth client ID
+ * @param {string} clientSecret - HubSpot OAuth client secret
+ * @param {string} refreshToken - Refresh token from HubSpot
+ * @returns {Promise<Object>} - New token response
+ */
+async function refreshAccessToken(clientId, clientSecret, refreshToken) {
+  try {
+    console.log('Refreshing HubSpot access token...');
+    const fetch = await getFetch();
+
+    const response = await fetch('https://api.hubapi.com/oauth/v1/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Failed to refresh access token: ${errorData.message || response.statusText}`);
+    }
+
+    const tokens = await response.json();
+    console.log('Successfully refreshed HubSpot access token');
+    return tokens;
+  } catch (error) {
+    console.error('Error refreshing access token:', error);
     throw error;
   }
 }
@@ -93,9 +132,9 @@ async function exchangeCodeForTokens(clientId, clientSecret, redirectUrl, code) 
  */
 async function createHubSpotSourceWithOAuth(airbyteClient, workspaceId, sourceDefinitionId, sourceName, tokens) {
   try {
-    console.log('Creating HubSpot source with OAuth credentials');
-    
-    // Create the source configuration
+    console.log('Creating HubSpot source with OAuth credentials via Airbyte');
+
+    // Create the source configuration for Airbyte's HubSpot connector
     const sourceConfig = {
       credentials: {
         credentials_title: "OAuth Credentials",
@@ -106,56 +145,58 @@ async function createHubSpotSourceWithOAuth(airbyteClient, workspaceId, sourceDe
       },
       start_date: new Date().toISOString().split('T')[0]
     };
-    
-    // Try to create the source directly using the Airbyte API
-    try {
-      const fetch = await getFetch();
-      
-      const url = `${airbyteClient.apiUrl}/sources`;
-      const options = {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          workspaceId,
-          sourceDefinitionId,
-          name: sourceName,
-          connectionConfiguration: sourceConfig
-        })
-      };
-      
-      // Try with basic auth if available
-      if (airbyteClient.email && airbyteClient.password) {
-        const base64Credentials = Buffer.from(`${airbyteClient.email}:${airbyteClient.password}`).toString('base64');
-        options.headers['Authorization'] = `Basic ${base64Credentials}`;
-      }
-      
-      console.log(`Making direct request to create source: ${url}`);
-      const directResponse = await fetch(url, options);
-      
-      if (directResponse.ok) {
-        const response = await directResponse.json();
-        console.log('Direct source creation successful!');
-        return response;
-      } else {
-        console.log(`Direct source creation failed: ${directResponse.status} ${directResponse.statusText}`);
-        throw new Error('Direct source creation failed');
-      }
-    } catch (directError) {
-      console.log('Direct source creation failed, trying standard method...');
-      
-      // Fall back to the standard createSource method
-      return await airbyteClient.createSource(
-        workspaceId,
-        sourceDefinitionId,
-        sourceName,
-        sourceConfig
-      );
-    }
+
+    // Create the source using the Airbyte client
+    console.log('Creating HubSpot source using Airbyte client...');
+    return await airbyteClient.createSource(
+      workspaceId,
+      sourceDefinitionId,
+      sourceName,
+      sourceConfig
+    );
   } catch (error) {
-    console.error('Error creating HubSpot source with OAuth:', error);
+    console.error('Error creating HubSpot source with OAuth via Airbyte:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update an existing HubSpot source with refreshed OAuth tokens
+ * @param {Object} airbyteClient - Airbyte client instance
+ * @param {string} sourceId - Airbyte source ID to update
+ * @param {Object} tokens - New OAuth tokens from HubSpot
+ * @returns {Promise<Object>} - Updated source
+ */
+async function updateHubSpotSourceWithRefreshedTokens(airbyteClient, sourceId, tokens) {
+  try {
+    console.log(`Updating HubSpot source ${sourceId} with refreshed OAuth tokens`);
+
+    // First, get the current source configuration
+    const source = await airbyteClient.getSource(sourceId);
+
+    if (!source) {
+      throw new Error(`Source with ID ${sourceId} not found`);
+    }
+
+    // Create an updated configuration with the new tokens
+    const updatedConfig = {
+      ...source.connectionConfiguration,
+      credentials: {
+        ...source.connectionConfiguration.credentials,
+        refresh_token: tokens.refresh_token,
+        access_token: tokens.access_token
+      }
+    };
+
+    // Update the source with the new configuration
+    console.log('Updating source with refreshed tokens...');
+    return await airbyteClient.updateSource(
+      sourceId,
+      source.name,
+      updatedConfig
+    );
+  } catch (error) {
+    console.error('Error updating HubSpot source with refreshed tokens:', error);
     throw error;
   }
 }
@@ -163,5 +204,7 @@ async function createHubSpotSourceWithOAuth(airbyteClient, workspaceId, sourceDe
 module.exports = {
   generateHubSpotOAuthUrl,
   exchangeCodeForTokens,
-  createHubSpotSourceWithOAuth
+  refreshAccessToken,
+  createHubSpotSourceWithOAuth,
+  updateHubSpotSourceWithRefreshedTokens
 };

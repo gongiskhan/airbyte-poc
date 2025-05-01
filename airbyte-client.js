@@ -621,6 +621,64 @@ class AirbyteClient {
   }
 
   /**
+   * Get a source by ID
+   */
+  async getSource(sourceId) {
+    try {
+      console.log(`Getting source with ID: ${sourceId}`);
+
+      const response = await this.request(`/sources/${sourceId}`, 'GET');
+
+      console.log(`Successfully retrieved source: ${response.name}`);
+      return response;
+    } catch (error) {
+      console.error(`Error getting source with ID ${sourceId}:`, error);
+
+      // Provide more detailed error information
+      if (error.status === 404) {
+        console.error(`Source with ID ${sourceId} not found.`);
+      } else if (error.status === 403) {
+        console.error('Forbidden error. This could be due to missing permissions.');
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Update a source
+   */
+  async updateSource(sourceId, name, connectionConfiguration) {
+    try {
+      console.log(`Updating source with ID: ${sourceId}`);
+      console.log('Updated connection configuration:', JSON.stringify(connectionConfiguration, null, 2));
+
+      const response = await this.request(`/sources/${sourceId}`, 'PUT', {
+        sourceId,
+        name,
+        connectionConfiguration
+      });
+
+      console.log(`Successfully updated source: ${response.name}`);
+      return response;
+    } catch (error) {
+      console.error(`Error updating source with ID ${sourceId}:`, error);
+
+      // Provide more detailed error information
+      if (error.status === 404) {
+        console.error(`Source with ID ${sourceId} not found.`);
+      } else if (error.status === 400) {
+        console.error('Bad request error. This could be due to invalid configuration parameters.');
+        console.error('Error details:', JSON.stringify(error.data || {}, null, 2));
+      } else if (error.status === 403) {
+        console.error('Forbidden error. This could be due to missing permissions.');
+      }
+
+      throw error;
+    }
+  }
+
+  /**
    * Create a destination
    */
   async createDestination(workspaceId, destinationDefinitionId, name, connectionConfiguration) {

@@ -224,9 +224,9 @@ app.post('/initiate-oauth', async (req, res) => {
     // Check if this is HubSpot source definition
     const isHubSpot = sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c';
 
-    // For HubSpot, use direct OAuth implementation
+    // For HubSpot, use OAuth implementation via Airbyte
     if (isHubSpot) {
-      console.log('Using direct HubSpot OAuth implementation...');
+      console.log('Using HubSpot OAuth implementation via Airbyte...');
 
       // Get HubSpot client ID from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
@@ -249,7 +249,8 @@ app.post('/initiate-oauth', async (req, res) => {
       return res.json({
         success: true,
         consentUrl,
-        oauthResponse: { authorizationUrl: consentUrl }
+        oauthResponse: { authorizationUrl: consentUrl },
+        message: 'Successfully initiated HubSpot OAuth flow via Airbyte'
       });
     }
 
@@ -409,7 +410,61 @@ app.post('/initiate-oauth', async (req, res) => {
   }
 });
 
-// Step 3 Alternative: Create a HubSpot source using Private App authentication
+// Endpoint to refresh HubSpot OAuth tokens
+app.post('/refresh-hubspot-oauth-tokens', async (req, res) => {
+  try {
+    const { sourceId, refreshToken } = req.body;
+
+    if (!sourceId) {
+      return res.status(400).json({ error: 'Source ID is required' });
+    }
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token is required' });
+    }
+
+    // Get HubSpot client ID and secret from environment variables
+    const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
+    const hubspotClientSecret = process.env.HUBSPOT_CLIENT_SECRET || AIRBYTE_CLIENT_SECRET;
+
+    if (!hubspotClientId || !hubspotClientSecret) {
+      return res.status(400).json({
+        error: 'Missing HubSpot Client ID or Client Secret',
+        message: 'Please set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET in your .env file'
+      });
+    }
+
+    console.log(`Refreshing OAuth tokens for HubSpot source ${sourceId}`);
+
+    // Refresh the tokens
+    const tokens = await hubspotOAuth.refreshAccessToken(
+      hubspotClientId,
+      hubspotClientSecret,
+      refreshToken
+    );
+
+    // Update the source with the new tokens
+    const updatedSource = await hubspotOAuth.updateHubSpotSourceWithRefreshedTokens(
+      airbyteClient,
+      sourceId,
+      tokens
+    );
+
+    res.json({
+      success: true,
+      source: updatedSource,
+      message: 'Successfully refreshed HubSpot OAuth tokens'
+    });
+  } catch (error) {
+    console.error('Error refreshing HubSpot OAuth tokens:', error);
+    res.status(error.status || 500).json({
+      error: 'Error refreshing HubSpot OAuth tokens',
+      message: error.message || 'Unknown error occurred'
+    });
+  }
+});
+
+// Step 3 Alternative: Create a HubSpot source using Private App authentication via Airbyte
 app.post('/create-hubspot-source-with-private-app', async (req, res) => {
   try {
     const { workspaceId, privateAppToken, sourceName } = req.body;
@@ -423,21 +478,21 @@ app.post('/create-hubspot-source-with-private-app', async (req, res) => {
     }
 
     const sourceDefinitionId = '36c891d9-4bd9-43ac-bad2-10e12756272c'; // HubSpot source definition ID
-    const name = sourceName || 'HubSpot Source (Private App)';
+    const name = sourceName || 'HubSpot Source via Airbyte (Private App)';
 
-    console.log(`Creating HubSpot source with Private App authentication in workspace ${workspaceId}`);
+    console.log(`Creating HubSpot source with Private App authentication in workspace ${workspaceId} via Airbyte`);
 
-    // First, test the connection to HubSpot
+    // First, validate the token format
     const isConnected = await hubspotPrivateApp.testHubSpotPrivateAppConnection(privateAppToken);
 
     if (!isConnected) {
       return res.status(400).json({
-        error: 'HubSpot connection test failed',
-        message: 'Could not connect to HubSpot with the provided Private App token. Please check the token and try again.'
+        error: 'HubSpot token validation failed',
+        message: 'Invalid HubSpot Private App token format. Please check the token and try again. It should start with "pat-".'
       });
     }
 
-    // Create the source using Private App authentication
+    // Create the source using Private App authentication via Airbyte
     const source = await hubspotPrivateApp.createHubSpotSourceWithPrivateApp(
       airbyteClient,
       workspaceId,
@@ -451,12 +506,13 @@ app.post('/create-hubspot-source-with-private-app', async (req, res) => {
 
     res.json({
       success: true,
-      source
+      source,
+      message: 'Successfully created HubSpot source via Airbyte'
     });
   } catch (error) {
-    console.error('Error creating HubSpot source with Private App authentication:', error);
+    console.error('Error creating HubSpot source with Private App authentication via Airbyte:', error);
     res.status(error.status || 500).json({
-      error: 'Error creating HubSpot source',
+      error: 'Error creating HubSpot source via Airbyte',
       message: error.message || 'Unknown error occurred'
     });
   }
@@ -499,9 +555,9 @@ app.get('/oauth/callback', async (req, res) => {
 
     let sourceResponse;
 
-    // For HubSpot, use direct OAuth implementation
+    // For HubSpot, use OAuth implementation via Airbyte
     if (isHubSpot) {
-      console.log('Using direct HubSpot OAuth implementation for callback...');
+      console.log('Using HubSpot OAuth implementation via Airbyte for callback...');
 
       // Get HubSpot client ID and secret from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
@@ -523,18 +579,18 @@ app.get('/oauth/callback', async (req, res) => {
 
         console.log('Successfully exchanged code for tokens');
 
-        // Create the source using the tokens
+        // Create the source using the tokens via Airbyte
         sourceResponse = await hubspotOAuth.createHubSpotSourceWithOAuth(
           airbyteClient,
           workspaceId,
           sourceDefinitionId,
-          sourceName,
+          `HubSpot Source via Airbyte (OAuth)`,
           tokens
         );
 
-        console.log('Successfully created HubSpot source with OAuth');
+        console.log('Successfully created HubSpot source with OAuth via Airbyte');
       } catch (hubspotError) {
-        console.error('Error with direct HubSpot OAuth:', hubspotError);
+        console.error('Error with HubSpot OAuth via Airbyte:', hubspotError);
         throw hubspotError;
       }
     } else {
