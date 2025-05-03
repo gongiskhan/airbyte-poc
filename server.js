@@ -18,19 +18,19 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Airbyte API credentials
-const AIRBYTE_EMAIL = 'goncalo.p.gomes@gmail.com';
-const AIRBYTE_PASSWORD = '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
-const AIRBYTE_CLIENT_ID = '68eb3177-2afb-44da-851d-a9deb0bb9364';
-const AIRBYTE_CLIENT_SECRET = 'AKS7gtga3Sw1HSRI65KtauGPPaeKf0Ju';
-// Token generated from the Airbyte UI
-const AIRBYTE_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vYWlyYnl0ZS1hYmN0bC1haXJieXRlLXdlYmFwcC1zdmM6ODAiLCJhdWQiOiJhaXJieXRlLXNlcnZlciIsInN1YiI6IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMCIsImV4cCI6MTc0NTczMDk4MSwicm9sZXMiOlsiQVVUSEVOVElDQVRFRF9VU0VSIiwiUkVBREVSIiwiRURJVE9SIiwiQURNSU4iLCJXT1JLU1BBQ0VfUkVBREVSIiwiV09SS1NQQUNFX1JVTk5FUiIsIldPUktTUEFDRV9FRElUT1IiLCJXT1JLU1BBQ0VfQURNSU4iLCJPUkdBTklaQVRJT05fTUVNQkVSIiwiT1JHQU5JWkFUSU9OX1JFQURFUiIsIk9SR0FOSVpBVElPTl9SVU5ORVIiLCJPUkdBTklaQVRJT05fRURJVE9SIiwiT1JHQU5JWkFUSU9OX0FETUlOIl19.jcgaMw3S2grqGSnOI4_Be3qbY065h1xfmLIxTcZPIBo';
+const AIRBYTE_EMAIL = 'gcpvm@admin.com';
+const AIRBYTE_PASSWORD = 'yeloTFXAQhCl0iFHhE1yvLUBSGcSY4aK';
+const AIRBYTE_CLIENT_ID = '29aa6b49-16a4-4789-af55-3ea10d42700b';
+const AIRBYTE_CLIENT_SECRET = 'E66EscmO8GML8u5kHby7Wv24B9wiSl9y';
+// Token will be generated using the credentials above
+const AIRBYTE_TOKEN = null;
 
-console.log('Using self-hosted Airbyte instance at http://scuver.services:8000');
+console.log('Using Airbyte instance at https://airbyte.closedata.co');
 
-// Create an instance of our Airbyte client with the correct API path for OSS users
+// Create an instance of our Airbyte client with the correct API path
 const airbyteClient = new AirbyteClient({
-  // Always use api/public/v1 for self-hosted Airbyte
-  apiUrl: 'http://scuver.services:8000/api/public/v1',
+  // Use the closedata.co domain with the correct API path
+  apiUrl: 'https://airbyte.closedata.co/api/v1',
   clientId: AIRBYTE_CLIENT_ID,
   clientSecret: AIRBYTE_CLIENT_SECRET,
   email: AIRBYTE_EMAIL,
@@ -38,7 +38,7 @@ const airbyteClient = new AirbyteClient({
   token: AIRBYTE_TOKEN
 });
 
-console.log('Using token-based authentication with a token generated from the Airbyte UI');
+console.log('Using credential-based authentication to generate tokens as needed');
 
 // Stores created resources for the demo
 const demoState = {
@@ -50,6 +50,7 @@ const demoState = {
 
 // For OAuth callbacks
 const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3002/oauth/callback';
+console.log('Using OAuth callback URL:', CALLBACK_URL);
 
 // Step 1: Test the Airbyte connection
 app.post('/test-connection', async (req, res) => {
@@ -224,9 +225,39 @@ app.post('/initiate-oauth', async (req, res) => {
     // Check if this is HubSpot source definition
     const isHubSpot = sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c';
 
-    // For HubSpot, use OAuth implementation via Airbyte
+    // For HubSpot, use the client's initiateOAuth method which now uses getSourceOAuthConsent
     if (isHubSpot) {
-      console.log('Using HubSpot OAuth implementation via Airbyte...');
+      console.log('Using airbyteClient.initiateOAuth method for HubSpot...');
+
+      try {
+        // Call the initiateOAuth method which will try getSourceOAuthConsent first
+        const oauthResponse = await airbyteClient.initiateOAuth(
+          workspaceId,
+          sourceDefinitionId,
+          CALLBACK_URL
+        );
+
+        // Check if we got a valid response with a consent URL
+        if (oauthResponse && (oauthResponse.consentUrl || oauthResponse.authorizationUrl)) {
+          const consentUrl = oauthResponse.consentUrl || oauthResponse.authorizationUrl;
+          console.log('Successfully got consent URL:', consentUrl);
+
+          return res.json({
+            success: true,
+            consentUrl,
+            oauthResponse,
+            message: 'Successfully initiated HubSpot OAuth flow via Airbyte'
+          });
+        } else {
+          console.log('Response from initiateOAuth did not contain a consent URL, falling back to legacy method');
+        }
+      } catch (oauthError) {
+        console.log('Error using airbyteClient.initiateOAuth method:', oauthError.message);
+        console.log('Falling back to legacy HubSpot OAuth implementation...');
+      }
+
+      // Fall back to the legacy method if the initiateOAuth method fails
+      console.log('Using legacy HubSpot OAuth implementation via Airbyte...');
 
       // Get HubSpot client ID from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
@@ -250,7 +281,7 @@ app.post('/initiate-oauth', async (req, res) => {
         success: true,
         consentUrl,
         oauthResponse: { authorizationUrl: consentUrl },
-        message: 'Successfully initiated HubSpot OAuth flow via Airbyte'
+        message: 'Successfully initiated HubSpot OAuth flow via Airbyte using legacy method'
       });
     }
 
@@ -535,13 +566,26 @@ app.get('/oauth/callback', async (req, res) => {
   try {
     // Parse the state parameter to get the sourceDefinitionId
     let sourceDefinitionId;
+    let workspaceIdFromState;
+
+    console.log('Received OAuth callback with state:', state);
+
     try {
       // Try to parse the state as JSON first
       const stateObj = JSON.parse(decodeURIComponent(state));
+      console.log('Parsed state object:', stateObj);
       sourceDefinitionId = stateObj.sourceDefinitionId;
+      workspaceIdFromState = stateObj.workspaceId;
     } catch (parseError) {
+      console.log('Error parsing state parameter:', parseError.message);
       // If parsing fails, use the state directly or fall back to the query parameter
       sourceDefinitionId = req.query.sourceDefinitionId || state;
+    }
+
+    // Use workspaceId from state if available
+    if (workspaceIdFromState) {
+      workspaceId = workspaceIdFromState;
+      console.log('Using workspaceId from state parameter:', workspaceId);
     }
 
     if (!sourceDefinitionId) {
@@ -562,6 +606,9 @@ app.get('/oauth/callback', async (req, res) => {
       // Get HubSpot client ID and secret from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
       const hubspotClientSecret = process.env.HUBSPOT_CLIENT_SECRET || AIRBYTE_CLIENT_SECRET;
+
+      console.log('Using HubSpot Client ID:', hubspotClientId);
+      console.log('Using HubSpot Client Secret:', hubspotClientSecret ? '********' : 'not set');
 
       if (!hubspotClientId || !hubspotClientSecret) {
         return res.status(400).send('Missing HubSpot Client ID or Client Secret. Please set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET in your .env file.');

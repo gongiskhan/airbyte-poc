@@ -10,12 +10,12 @@ async function getFetch() {
 
 class AirbyteClient {
   constructor(config) {
-    // Use the correct API path for OSS users
-    this.apiUrl = config.apiUrl || 'http://scuver.services:8000/api/public/v1';
+    // Use the correct API path for the closedata.co domain
+    this.apiUrl = config.apiUrl || 'https://airbyte.closedata.co/api/v1';
     this.clientId = config.clientId;
     this.clientSecret = config.clientSecret;
-    this.email = config.email || 'goncalo.p.gomes@gmail.com';
-    this.password = config.password || '32bTEN4EvQtGruOxMLCrn6Ai17zHYMS7';
+    this.email = config.email || 'gcpvm@admin.com';
+    this.password = config.password || 'yeloTFXAQhCl0iFHhE1yvLUBSGcSY4aK';
 
     // Use a hardcoded token for testing
     this.accessToken = config.token;
@@ -65,11 +65,10 @@ class AirbyteClient {
     try {
       const fetch = await getFetch();
 
-      // For self-hosted Airbyte, we can use basic auth to get a token
-      // This is a simplified approach - in production you would use the proper Airbyte auth endpoints
-      // Use the base URL with the correct path for authentication
-      const baseUrl = this.apiUrl.substring(0, this.apiUrl.indexOf('/api/'));
-      const authUrl = `${baseUrl}/api/public/v1/auth/login`;
+      // For the closedata.co domain, use the appropriate auth endpoint
+      // Extract the base URL for authentication
+      const baseUrl = this.apiUrl.substring(0, this.apiUrl.indexOf('/api/v1'));
+      const authUrl = `${baseUrl}/api/v1/auth/login`;
 
       const options = {
         method: 'POST',
@@ -290,13 +289,152 @@ class AirbyteClient {
   }
 
   /**
+   * Get OAuth consent URL using the new endpoint
+   */
+  async getSourceOAuthConsent(sourceDefinitionId, workspaceId, redirectUrl) {
+    try {
+      console.log(`Getting OAuth consent URL for source definition ${sourceDefinitionId} in workspace ${workspaceId}`);
+
+      // Define all possible endpoint paths to try for the closedata.co domain
+      const endpoints = [
+        '/source_oauths/get_consent_url',
+        '/source_oauths/get_oauth_consent_url',
+        '/connector_builder_projects/get_oauth_consent_url',
+        '/source_oauths/complete_oauth',
+      ];
+
+      // Define all possible request body formats to try
+      const requestBodies = [
+        // Format 1: Standard format with oauthInputConfiguration
+        {
+          sourceDefinitionId,
+          workspaceId,
+          redirectUrl,
+          oauthInputConfiguration: {
+            scopes: [
+              "crm.objects.contacts.read",
+              "crm.objects.companies.read",
+              "crm.objects.deals.read",
+              "crm.schemas.deals.read",
+              "crm.schemas.companies.read",
+              "content",
+              "crm.lists.read",
+              "forms",
+              "tickets",
+              "e-commerce",
+              "sales-email-read",
+              "automation"
+            ]
+          }
+        },
+        // Format 2: Without oauthInputConfiguration
+        {
+          sourceDefinitionId,
+          workspaceId,
+          redirectUrl
+        },
+        // Format 3: With different parameter names
+        {
+          source_definition_id: sourceDefinitionId,
+          workspace_id: workspaceId,
+          redirect_url: redirectUrl,
+          oauth_input_configuration: {
+            scopes: [
+              "crm.objects.contacts.read",
+              "crm.objects.companies.read",
+              "crm.objects.deals.read",
+              "crm.schemas.deals.read",
+              "crm.schemas.companies.read",
+              "content",
+              "crm.lists.read",
+              "forms",
+              "tickets",
+              "e-commerce",
+              "sales-email-read",
+              "automation"
+            ]
+          }
+        },
+        // Format 4: For connector builder project
+        {
+          projectId: workspaceId,
+          sourceDefinitionId,
+          redirectUrl
+        }
+      ];
+
+      // Try all combinations of endpoints and request bodies
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        for (const [index, body] of requestBodies.entries()) {
+          try {
+            console.log(`Trying endpoint: ${endpoint} with request body format ${index + 1}`);
+            const response = await this.request(endpoint, 'POST', body);
+
+            // Check if we got a valid response with a consent URL
+            if (response && (response.consentUrl || response.authorizationUrl)) {
+              console.log('Success! Got consent URL:', response.consentUrl || response.authorizationUrl);
+              return response;
+            } else {
+              console.log('Response did not contain a consent URL:', JSON.stringify(response, null, 2));
+            }
+          } catch (error) {
+            console.log(`Attempt with ${endpoint} and body format ${index + 1} failed:`, error.message);
+            lastError = error;
+            // Continue to the next combination
+          }
+        }
+      }
+
+      // If we've tried all combinations and none worked, throw the last error
+      if (lastError) {
+        throw lastError;
+      } else {
+        throw new Error('All OAuth consent URL attempts failed with unknown errors');
+      }
+    } catch (error) {
+      console.error('Error getting OAuth consent URL:', error);
+
+      // Provide more detailed error information
+      if (error.status === 404) {
+        console.error('Endpoint not found. This could be because the API version does not support this endpoint.');
+      } else if (error.status === 422) {
+        console.error('Invalid input. Please check the request parameters.');
+      } else if (error.status === 403) {
+        console.error('Forbidden error. This could be due to missing permissions or incorrect OAuth configuration.');
+        console.error('For self-hosted Airbyte, you may need to check:');
+        console.error('1. Your authentication credentials are correct');
+        console.error('2. The user has permission to access OAuth endpoints');
+        console.error('3. OAuth is properly configured in your Airbyte instance');
+      }
+
+      throw error;
+    }
+  }
+
+  /**
    * Create a source with OAuth
    */
   async initiateOAuth(workspaceId, sourceDefinitionId, redirectUrl) {
     try {
       console.log(`Initiating OAuth flow for workspace ${workspaceId}, source definition ${sourceDefinitionId}, and redirect URL ${redirectUrl}`);
 
-      // Try multiple endpoint formats for OAuth initiation
+      // First try the new getSourceOAuthConsent method
+      try {
+        console.log('Attempting OAuth initiation with new get_consent_url endpoint...');
+        const response = await this.getSourceOAuthConsent(sourceDefinitionId, workspaceId, redirectUrl);
+
+        if (response && response.consentUrl) {
+          console.log(`Successfully got consent URL: ${response.consentUrl}`);
+          return response;
+        }
+      } catch (newMethodError) {
+        console.log('New get_consent_url endpoint failed:', newMethodError.message);
+        console.log('Falling back to legacy methods...');
+      }
+
+      // If the new method fails, fall back to the legacy methods
       let response;
       let error;
 

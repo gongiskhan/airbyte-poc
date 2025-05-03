@@ -36,12 +36,18 @@ function generateHubSpotOAuthUrl(clientId, redirectUrl, workspaceId, sourceDefin
 
   // Create the OAuth URL
   const scopesParam = encodeURIComponent(scopes.join(' '));
-  const state = encodeURIComponent(JSON.stringify({
+  const stateObj = {
     workspaceId,
     sourceDefinitionId
-  }));
+  };
 
-  return `https://app.hubspot.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUrl)}&scope=${scopesParam}&state=${state}`;
+  console.log('Creating OAuth state parameter with:', stateObj);
+  const state = encodeURIComponent(JSON.stringify(stateObj));
+
+  const oauthUrl = `https://app.hubspot.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUrl)}&scope=${scopesParam}&state=${state}`;
+  console.log('Generated HubSpot OAuth URL:', oauthUrl);
+
+  return oauthUrl;
 }
 
 /**
@@ -54,28 +60,50 @@ function generateHubSpotOAuthUrl(clientId, redirectUrl, workspaceId, sourceDefin
  */
 async function exchangeCodeForTokens(clientId, clientSecret, redirectUrl, code) {
   try {
+    console.log('Exchanging code for tokens with:');
+    console.log('- Client ID:', clientId);
+    console.log('- Client Secret:', clientSecret ? '********' : 'not set');
+    console.log('- Redirect URL:', redirectUrl);
+    console.log('- Code:', code ? `${code.substring(0, 10)}...` : 'not set');
+
     const fetch = await getFetch();
+
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUrl,
+      code: code
+    });
+
+    console.log('Making POST request to https://api.hubapi.com/oauth/v1/token');
 
     const response = await fetch('https://api.hubapi.com/oauth/v1/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUrl,
-        code: code
-      })
+      body: params
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Failed to exchange code for tokens: ${errorData.message || response.statusText}`);
+      const errorText = await response.text();
+      let errorMessage = `Failed to exchange code for tokens: HTTP ${response.status} ${response.statusText}`;
+
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = `Failed to exchange code for tokens: ${errorData.message || response.statusText}`;
+        console.error('Error response from HubSpot:', errorData);
+      } catch (parseError) {
+        console.error('Error response from HubSpot (non-JSON):', errorText);
+      }
+
+      throw new Error(errorMessage);
     }
 
-    return await response.json();
+    const tokens = await response.json();
+    console.log('Successfully exchanged code for tokens');
+    return tokens;
   } catch (error) {
     console.error('Error exchanging code for tokens:', error);
     throw error;
