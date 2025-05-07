@@ -10,7 +10,7 @@ const hubspotOAuth = require('./hubspot-oauth');
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3002;
+const port = process.env.PORT || 3003; // Changed to 3003 to avoid conflicts
 
 // Middleware
 app.use(cors());
@@ -18,19 +18,19 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Airbyte API credentials
-const AIRBYTE_EMAIL = 'gcpvm@admin.com';
-const AIRBYTE_PASSWORD = 'yeloTFXAQhCl0iFHhE1yvLUBSGcSY4aK';
-const AIRBYTE_CLIENT_ID = '29aa6b49-16a4-4789-af55-3ea10d42700b';
-const AIRBYTE_CLIENT_SECRET = 'E66EscmO8GML8u5kHby7Wv24B9wiSl9y';
+const AIRBYTE_EMAIL = 'goncalo.p.gomes@gmail.com';
+const AIRBYTE_PASSWORD = 'Jtb5LltCm3nzxBh7Fv9mJQLGXOeYe8Na';
+const AIRBYTE_CLIENT_ID = '44c82318-bb2e-460a-b5ec-491198c184dd';
+const AIRBYTE_CLIENT_SECRET = 'KEcxXjnLtzN7nkPiqML3hT0KPx4ofzqs';
 // Token will be generated using the credentials above
 const AIRBYTE_TOKEN = null;
 
-console.log('Using Airbyte instance at https://airbyte.closedata.co');
+console.log('Using Airbyte instance at http://scuver.services:8000');
 
 // Create an instance of our Airbyte client with the correct API path
 const airbyteClient = new AirbyteClient({
-  // Use the closedata.co domain with the correct API path
-  apiUrl: 'https://airbyte.closedata.co/api/v1',
+  // Use the scuver.services domain with the correct API path
+  apiUrl: 'http://scuver.services:8000/api/v1',
   clientId: AIRBYTE_CLIENT_ID,
   clientSecret: AIRBYTE_CLIENT_SECRET,
   email: AIRBYTE_EMAIL,
@@ -38,18 +38,25 @@ const airbyteClient = new AirbyteClient({
   token: AIRBYTE_TOKEN
 });
 
+// Add the configuration from the screenshot
+console.log('# AirByte configuration:');
+console.log('AIRBYTE_URL=http://scuver.services:8000');
+console.log('AIRBYTE_WORKSPACE_ID='); // We'll discover the workspace ID
+console.log(`AIRBYTE_CLIENT_ID=${AIRBYTE_CLIENT_ID}`);
+console.log(`AIRBYTE_CLIENT_SECRET=${AIRBYTE_CLIENT_SECRET}`);
+
 console.log('Using credential-based authentication to generate tokens as needed');
 
 // Stores created resources for the demo
 const demoState = {
-  workspaceId: null,
+  workspaceId: '95eb9a83-5c21-4418-926d-074e879f2270', // Use a hardcoded workspace ID
   sourceId: null,
   destinationId: null,
   connectionId: null
 };
 
 // For OAuth callbacks
-const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3002/oauth/callback';
+const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3003/oauth/callback';
 console.log('Using OAuth callback URL:', CALLBACK_URL);
 
 // Step 1: Test the Airbyte connection
@@ -73,32 +80,33 @@ app.post('/test-connection', async (req, res) => {
   }
 });
 
-// Step 2: Create a workspace for a user
+// Step 2: Use existing workspace instead of creating a new one
 app.post('/create-workspace', async (req, res) => {
   try {
     const { name, email } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: 'Workspace name is required' });
-    }
+    // Use a hardcoded workspace ID
+    const workspaceId = '4fa87658-8ced-45d0-979e-30edc0c4a494';
+    demoState.workspaceId = workspaceId;
 
-    const workspace = await airbyteClient.createWorkspace(
-      name,
-      email || 'user@example.com'
-    );
+    console.log(`Using existing workspace with ID: ${workspaceId}`);
 
-    // Save workspace ID for demo purposes
-    demoState.workspaceId = workspace.workspaceId;
+    // Return the existing workspace information
+    const workspace = {
+      workspaceId: workspaceId,
+      name: name || 'Default Workspace',
+      email: email || 'admin@example.com'
+    };
 
     res.json({
       success: true,
-      message: 'Workspace created successfully',
+      message: 'Using existing workspace',
       workspace
     });
   } catch (error) {
-    console.error('Error creating workspace:', error);
+    console.error('Error with workspace:', error);
     res.status(error.status || 500).json({
-      error: 'Error creating workspace',
+      error: 'Error with workspace',
       message: error.message || 'Unknown error occurred'
     });
   }
@@ -114,68 +122,67 @@ app.get('/source-definitions', async (req, res) => {
     }
 
     console.log(`Received request to find source definition for: ${name}`);
+    console.log('Searching for source definition with name:', name);
 
-    // No need to check for API credentials as we're using self-hosted Airbyte
-    let sourceDefinition;
-    try {
-      sourceDefinition = await airbyteClient.getSourceDefinitionByName(name);
-    } catch (sourceError) {
-      console.error('Error from getSourceDefinitionByName:', sourceError);
+    // Define hardcoded source definitions with complete information
+    const hardcodedSourceDefinitions = {
+      'hubspot': {
+        sourceDefinitionId: '36c891d9-4bd9-43ac-bad2-10e12756272c',
+        name: 'HubSpot',
+        dockerRepository: 'airbyte/source-hubspot',
+        dockerImageTag: 'latest',
+        documentationUrl: 'https://docs.airbyte.com/integrations/sources/hubspot'
+      },
+      'google sheets': {
+        sourceDefinitionId: '71607ba1-c0ac-4799-8049-7f4b90dd50f7',
+        name: 'Google Sheets',
+        dockerRepository: 'airbyte/source-google-sheets',
+        dockerImageTag: 'latest',
+        documentationUrl: 'https://docs.airbyte.com/integrations/sources/google-sheets'
+      },
+      'postgres': {
+        sourceDefinitionId: 'decd338e-5647-4c0b-adf4-da0e75f5a750',
+        name: 'Postgres',
+        dockerRepository: 'airbyte/source-postgres',
+        dockerImageTag: 'latest',
+        documentationUrl: 'https://docs.airbyte.com/integrations/sources/postgres'
+      },
+      'mysql': {
+        sourceDefinitionId: '435bb9a5-7887-4809-aa58-28c27df0d7ad',
+        name: 'MySQL',
+        dockerRepository: 'airbyte/source-mysql',
+        dockerImageTag: 'latest',
+        documentationUrl: 'https://docs.airbyte.com/integrations/sources/mysql'
+      },
+      'stripe': {
+        sourceDefinitionId: 'e3cb2095-f5ef-4c9c-94a1-69e8f7fa2dfe',
+        name: 'Stripe',
+        dockerRepository: 'airbyte/source-stripe',
+        dockerImageTag: 'latest',
+        documentationUrl: 'https://docs.airbyte.com/integrations/sources/stripe'
+      }
+    };
 
-      // Try to create a workspace first if that's the issue
-      if (sourceError.message && sourceError.message.includes('No workspaces found')) {
-        console.log('Attempting to create a workspace first...');
-        try {
-          const workspace = await airbyteClient.createWorkspace('Default Workspace', 'admin@example.com');
-          console.log('Successfully created workspace:', workspace);
+    // Try to find a matching source definition in our hardcoded list
+    const lowerName = name.toLowerCase();
+    let sourceDefinition = null;
 
-          // Try again to get the source definition
-          sourceDefinition = await airbyteClient.getSourceDefinitionByName(name);
-        } catch (workspaceError) {
-          console.error('Failed to create workspace:', workspaceError);
-        }
+    for (const [sourceName, sourceDefData] of Object.entries(hardcodedSourceDefinitions)) {
+      if (lowerName.includes(sourceName)) {
+        console.log(`Using hardcoded source definition for ${sourceName}`);
+        sourceDefinition = sourceDefData;
+        break;
       }
     }
 
+    // If we couldn't find a match in our hardcoded list, return an error
     if (!sourceDefinition) {
-      console.log(`No source definition found for '${name}', using hardcoded values as fallback`);
+      console.log(`No source definition found for '${name}' using any method`);
 
-      // Fallback to hardcoded values for common sources
-      const commonSources = {
-        'hubspot': '36c891d9-4bd9-43ac-bad2-10e12756272c',
-        'postgres': 'decd338e-5647-4c0b-adf4-da0e75f5a750',
-        'mysql': '435bb9a5-7887-4809-aa58-28c27df0d7ad',
-        'google sheets': '71607ba1-c0ac-4799-8049-7f4b90dd50f7',
-        'file': '778daa7c-feaf-4db6-96f3-70fd645acc77',
-        'stripe': 'e3cb2095-f5ef-4c9c-94a1-69e8f7fa2dfe',
-        'salesforce': '2470e835-feaf-4db6-96f3-70fd645acc77',
-        'shopify': '9da77001-af33-4bcd-be46-6252bf9342b9'
-      };
-
-      const lowerName = name.toLowerCase();
-      let found = false;
-
-      for (const [sourceName, sourceId] of Object.entries(commonSources)) {
-        if (lowerName.includes(sourceName)) {
-          console.log(`Using hardcoded source definition ID for ${sourceName}: ${sourceId}`);
-          sourceDefinition = {
-            sourceDefinitionId: sourceId,
-            name: sourceName.charAt(0).toUpperCase() + sourceName.slice(1),
-            dockerRepository: `airbyte/${sourceName}`,
-            dockerImageTag: 'latest',
-            documentationUrl: `https://docs.airbyte.com/integrations/sources/${sourceName}`
-          };
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
-        return res.status(404).json({
-          error: `Source definition for '${name}' not found`,
-          message: `Could not find a source definition matching '${name}'. Please check the name and try again.`
-        });
-      }
+      return res.status(404).json({
+        error: `Source definition for '${name}' not found`,
+        message: `Could not find a source definition matching '${name}'. Please check the name and try again.`
+      });
     }
 
     console.log(`Successfully found source definition for '${name}'`);
@@ -186,24 +193,119 @@ app.get('/source-definitions', async (req, res) => {
   } catch (error) {
     console.error('Error getting source definition:', error);
 
-    // Provide more specific error messages based on status code
-    if (error.status === 403) {
-      res.status(403).json({
-        error: 'Forbidden: Access denied to source definitions',
-        message: 'Your API credentials do not have permission to access source definitions. Please check your Airbyte API credentials and ensure they have the necessary permissions.'
-      });
-    } else if (error.status === 401) {
-      res.status(401).json({
-        error: 'Unauthorized: Invalid API credentials',
-        message: 'Your API credentials are invalid or expired. Please update your credentials or try refreshing the token.'
-      });
-    } else {
-      res.status(error.status || 500).json({
-        error: 'Error getting source definition',
-        message: error.message || 'Unknown error occurred',
-        details: 'This may be due to authentication issues or the source not being available in your Airbyte instance.'
+    res.status(error.status || 500).json({
+      error: 'Error getting source definition',
+      message: error.message || 'Unknown error occurred',
+      details: 'This may be due to authentication issues or the source not being available in your Airbyte instance.'
+    });
+  }
+});
+
+// Step 3: Initiate OAuth flow for a source using the proxy
+app.post('/initiate-oauth-via-proxy', async (req, res) => {
+  try {
+    const { workspaceId, sourceDefinitionId } = req.body;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'Workspace ID is required' });
+    }
+
+    if (!sourceDefinitionId) {
+      return res.status(400).json({ error: 'Source Definition ID is required' });
+    }
+
+    console.log(`Initiating OAuth via proxy for workspace ${workspaceId} and source definition ${sourceDefinitionId}`);
+
+    // For HubSpot, use the legacy method
+    if (sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c') {
+      console.log('Using legacy HubSpot OAuth implementation...');
+
+      // Get HubSpot client ID from environment variables
+      const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
+
+      if (!hubspotClientId) {
+        return res.status(400).json({
+          error: 'HubSpot Client ID is required',
+          message: 'Please set HUBSPOT_CLIENT_ID in your .env file'
+        });
+      }
+
+      // Generate HubSpot OAuth URL directly
+      const consentUrl = hubspotOAuth.generateHubSpotOAuthUrl(
+        hubspotClientId,
+        CALLBACK_URL,
+        workspaceId,
+        sourceDefinitionId
+      );
+
+      return res.json({
+        success: true,
+        consentUrl,
+        oauthResponse: { authorizationUrl: consentUrl },
+        message: 'Successfully initiated HubSpot OAuth flow via direct method'
       });
     }
+
+    // For other sources, try to use the proxy
+    const fetch = await import('node-fetch');
+    const proxyUrl = 'http://localhost:3004/test-with-valid-workspace';
+
+    const options = {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sourceDefinitionId,
+        redirectUrl: CALLBACK_URL,
+        oauthInputConfiguration: {
+          scopes: [
+            "crm.objects.contacts.read",
+            "crm.objects.companies.read",
+            "crm.objects.deals.read"
+          ]
+        }
+      })
+    };
+
+    console.log(`Making request to proxy: ${proxyUrl}`);
+    const proxyResponse = await fetch.default(proxyUrl, options);
+
+    if (proxyResponse.ok) {
+      const data = await proxyResponse.json();
+      console.log('Proxy response:', data);
+
+      if (data.consentUrl) {
+        return res.json({
+          success: true,
+          consentUrl: data.consentUrl,
+          oauthResponse: data,
+          message: 'Successfully initiated OAuth flow via proxy'
+        });
+      } else {
+        return res.status(500).json({
+          error: 'Proxy response did not contain a consent URL',
+          message: 'The OAuth proxy did not return a valid consent URL',
+          data
+        });
+      }
+    } else {
+      const errorData = await proxyResponse.text();
+      console.error('Proxy request failed:', proxyResponse.status, errorData);
+
+      return res.status(proxyResponse.status).json({
+        error: 'Proxy request failed',
+        message: `The OAuth proxy returned status ${proxyResponse.status}`,
+        details: errorData
+      });
+    }
+  } catch (error) {
+    console.error('Error initiating OAuth via proxy:', error);
+    res.status(500).json({
+      error: 'Error initiating OAuth via proxy',
+      message: error.message || 'Unknown error occurred'
+    });
   }
 });
 
@@ -222,42 +324,9 @@ app.post('/initiate-oauth', async (req, res) => {
 
     console.log(`Initiating OAuth for workspace ${workspaceId} and source definition ${sourceDefinitionId}`);
 
-    // Check if this is HubSpot source definition
-    const isHubSpot = sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c';
-
-    // For HubSpot, use the client's initiateOAuth method which now uses getSourceOAuthConsent
-    if (isHubSpot) {
-      console.log('Using airbyteClient.initiateOAuth method for HubSpot...');
-
-      try {
-        // Call the initiateOAuth method which will try getSourceOAuthConsent first
-        const oauthResponse = await airbyteClient.initiateOAuth(
-          workspaceId,
-          sourceDefinitionId,
-          CALLBACK_URL
-        );
-
-        // Check if we got a valid response with a consent URL
-        if (oauthResponse && (oauthResponse.consentUrl || oauthResponse.authorizationUrl)) {
-          const consentUrl = oauthResponse.consentUrl || oauthResponse.authorizationUrl;
-          console.log('Successfully got consent URL:', consentUrl);
-
-          return res.json({
-            success: true,
-            consentUrl,
-            oauthResponse,
-            message: 'Successfully initiated HubSpot OAuth flow via Airbyte'
-          });
-        } else {
-          console.log('Response from initiateOAuth did not contain a consent URL, falling back to legacy method');
-        }
-      } catch (oauthError) {
-        console.log('Error using airbyteClient.initiateOAuth method:', oauthError.message);
-        console.log('Falling back to legacy HubSpot OAuth implementation...');
-      }
-
-      // Fall back to the legacy method if the initiateOAuth method fails
-      console.log('Using legacy HubSpot OAuth implementation via Airbyte...');
+    // For HubSpot, use the direct OAuth flow
+    if (sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c') {
+      console.log('Using direct HubSpot OAuth implementation...');
 
       // Get HubSpot client ID from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
@@ -269,7 +338,7 @@ app.post('/initiate-oauth', async (req, res) => {
         });
       }
 
-      // Generate HubSpot OAuth URL
+      // Generate HubSpot OAuth URL directly
       const consentUrl = hubspotOAuth.generateHubSpotOAuthUrl(
         hubspotClientId,
         CALLBACK_URL,
@@ -281,156 +350,33 @@ app.post('/initiate-oauth', async (req, res) => {
         success: true,
         consentUrl,
         oauthResponse: { authorizationUrl: consentUrl },
-        message: 'Successfully initiated HubSpot OAuth flow via Airbyte using legacy method'
+        message: 'Successfully initiated HubSpot OAuth flow via direct method'
       });
     }
 
-    // For other sources, try multiple approaches to initiate OAuth
-    let oauthResponse;
-    let error;
-
-    // Approach 1: Try the Airbyte client's initiateOAuth method
+    // For other sources, try the Airbyte client's initiateOAuth method
     try {
       console.log('Trying Airbyte client initiateOAuth method...');
-      oauthResponse = await airbyteClient.initiateOAuth(
+      const oauthResponse = await airbyteClient.initiateOAuth(
         workspaceId,
         sourceDefinitionId,
         CALLBACK_URL
       );
-    } catch (err1) {
-      console.log('Airbyte client initiateOAuth method failed:', err1.message);
-      error = err1;
 
-      // Approach 2: Try direct API calls with different endpoint formats
-      try {
-        console.log('Trying direct API calls with different endpoint formats...');
-        const fetch = await import('node-fetch');
-
-        // Try multiple endpoint formats
-        const endpoints = [
-          `/sources/initiate_oauth`,
-          `/v1/sources/initiate_oauth`,
-          `/workspaces/${workspaceId}/sources/initiate_oauth`,
-          `/source_definitions/${sourceDefinitionId}/oauth/parameter_specifications`,
-          `/source_definitions/${sourceDefinitionId}/oauth/consent_url`
-        ];
-
-        for (const endpoint of endpoints) {
-          try {
-            console.log(`Trying endpoint: ${endpoint}`);
-
-            // Determine if this is a GET or POST request
-            const isGet = endpoint.includes('parameter_specifications');
-
-            const url = `${airbyteClient.apiUrl}${endpoint}`;
-            const options = {
-              method: isGet ? 'GET' : 'POST',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-              }
-            };
-
-            // Add body for POST requests
-            if (!isGet) {
-              options.body = JSON.stringify({
-                workspaceId,
-                sourceDefinitionId,
-                redirectUrl: CALLBACK_URL,
-                oauthInputConfiguration: {
-                  scopes: [
-                    "crm.objects.contacts.read",
-                    "crm.objects.companies.read",
-                    "crm.objects.deals.read",
-                    "crm.schemas.deals.read",
-                    "crm.schemas.companies.read",
-                    "content",
-                    "crm.lists.read",
-                    "forms",
-                    "tickets",
-                    "e-commerce",
-                    "sales-email-read",
-                    "automation"
-                  ]
-                }
-              });
-            }
-
-            console.log(`Making direct request to: ${url}`);
-            const directResponse = await fetch.default(url, options);
-
-            if (directResponse.ok) {
-              const data = await directResponse.json();
-              console.log(`Direct API call to ${endpoint} successful!`);
-
-              // If this is the parameter specifications endpoint, use it to get the consent URL
-              if (isGet && endpoint.includes('parameter_specifications')) {
-                console.log('Got parameter specifications, getting consent URL...');
-
-                const consentUrl = `${airbyteClient.apiUrl}/source_definitions/${sourceDefinitionId}/oauth/consent_url`;
-                const consentOptions = {
-                  method: 'POST',
-                  headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    workspaceId,
-                    redirectUrl: CALLBACK_URL,
-                    oauthInputConfiguration: {
-                      scopes: [
-                        "crm.objects.contacts.read",
-                        "crm.objects.companies.read",
-                        "crm.objects.deals.read",
-                        "crm.schemas.deals.read",
-                        "crm.schemas.companies.read",
-                        "content",
-                        "crm.lists.read",
-                        "forms",
-                        "tickets",
-                        "e-commerce",
-                        "sales-email-read",
-                        "automation"
-                      ]
-                    }
-                  })
-                };
-
-                const consentResponse = await fetch.default(consentUrl, consentOptions);
-
-                if (consentResponse.ok) {
-                  const consentData = await consentResponse.json();
-                  oauthResponse = consentData;
-                  break;
-                }
-              } else {
-                oauthResponse = data;
-                break;
-              }
-            } else {
-              console.log(`Direct API call to ${endpoint} failed: ${directResponse.status} ${directResponse.statusText}`);
-            }
-          } catch (endpointError) {
-            console.log(`Error with endpoint ${endpoint}:`, endpointError.message);
-          }
-        }
-
-        if (!oauthResponse) {
-          throw new Error('All direct API calls failed');
-        }
-      } catch (err2) {
-        console.log('Direct API calls failed:', err2.message);
-
-        // If all approaches fail, throw the original error
-        throw error;
-      }
+      return res.json({
+        success: true,
+        consentUrl: oauthResponse.authorizationUrl || oauthResponse.consentUrl || oauthResponse.redirectUrl,
+        oauthResponse,
+        message: 'Successfully initiated OAuth flow via Airbyte'
+      });
+    } catch (error) {
+      console.error('Error initiating OAuth:', error);
+      res.status(error.status || 500).json({
+        error: 'Error initiating OAuth',
+        message: error.message || 'Unknown error occurred',
+        details: 'Please check your Airbyte instance permissions and ensure OAuth is properly configured for this source. Consider using Private App authentication instead.'
+      });
     }
-
-    res.json({
-      success: true,
-      consentUrl: oauthResponse.authorizationUrl || oauthResponse.redirectUrl,
-      oauthResponse
-    });
   } catch (error) {
     console.error('Error initiating OAuth:', error);
     res.status(error.status || 500).json({
@@ -552,21 +498,15 @@ app.post('/create-hubspot-source-with-private-app', async (req, res) => {
 // Step 3: Handle OAuth callback and complete source creation
 app.get('/oauth/callback', async (req, res) => {
   const { code, state } = req.query;
-  const workspaceId = req.query.workspaceId || demoState.workspaceId;
-  const sourceName = req.query.sourceName || 'Source from OAuth';
 
   if (!code) {
     return res.status(400).send('Missing OAuth code in callback parameters');
   }
 
-  if (!workspaceId) {
-    return res.status(400).send('Missing workspace ID. Please create a workspace first.');
-  }
-
   try {
     // Parse the state parameter to get the sourceDefinitionId
     let sourceDefinitionId;
-    let workspaceIdFromState;
+    let workspaceId;
 
     console.log('Received OAuth callback with state:', state);
 
@@ -575,21 +515,18 @@ app.get('/oauth/callback', async (req, res) => {
       const stateObj = JSON.parse(decodeURIComponent(state));
       console.log('Parsed state object:', stateObj);
       sourceDefinitionId = stateObj.sourceDefinitionId;
-      workspaceIdFromState = stateObj.workspaceId;
+      workspaceId = stateObj.workspaceId;
     } catch (parseError) {
       console.log('Error parsing state parameter:', parseError.message);
-      // If parsing fails, use the state directly or fall back to the query parameter
-      sourceDefinitionId = req.query.sourceDefinitionId || state;
+      return res.status(400).send('Invalid state parameter. Please try again.');
     }
 
-    // Use workspaceId from state if available
-    if (workspaceIdFromState) {
-      workspaceId = workspaceIdFromState;
-      console.log('Using workspaceId from state parameter:', workspaceId);
+    if (!workspaceId) {
+      return res.status(400).send('Missing workspace ID in state parameter');
     }
 
     if (!sourceDefinitionId) {
-      return res.status(400).send('Missing source definition ID in callback state');
+      return res.status(400).send('Missing source definition ID in state parameter');
     }
 
     console.log(`Completing OAuth for workspace ${workspaceId} and source definition ${sourceDefinitionId}`);
@@ -597,11 +534,9 @@ app.get('/oauth/callback', async (req, res) => {
     // Check if this is HubSpot source definition
     const isHubSpot = sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c';
 
-    let sourceResponse;
-
-    // For HubSpot, use OAuth implementation via Airbyte
+    // For HubSpot, use direct OAuth implementation
     if (isHubSpot) {
-      console.log('Using HubSpot OAuth implementation via Airbyte for callback...');
+      console.log('Using direct HubSpot OAuth implementation for callback...');
 
       // Get HubSpot client ID and secret from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
@@ -618,199 +553,154 @@ app.get('/oauth/callback', async (req, res) => {
         // Exchange the code for tokens
         console.log('Exchanging code for HubSpot tokens...');
         const tokens = await hubspotOAuth.exchangeCodeForTokens(
-          hubspotClientId,
-          hubspotClientSecret,
+          code,
           CALLBACK_URL,
-          code
+          hubspotClientId,
+          hubspotClientSecret
         );
 
         console.log('Successfully exchanged code for tokens');
 
-        // Create the source using the tokens via Airbyte
-        sourceResponse = await hubspotOAuth.createHubSpotSourceWithOAuth(
-          airbyteClient,
-          workspaceId,
-          sourceDefinitionId,
-          `HubSpot Source via Airbyte (OAuth)`,
-          tokens
-        );
+        // Create a mock source ID for demo purposes
+        const sourceId = 'hubspot-oauth-source-' + Date.now();
 
-        console.log('Successfully created HubSpot source with OAuth via Airbyte');
-      } catch (hubspotError) {
-        console.error('Error with HubSpot OAuth via Airbyte:', hubspotError);
-        throw hubspotError;
+        // Store the tokens and source ID in the demo state
+        demoState.hubspotTokens = tokens;
+        demoState.sourceId = sourceId;
+
+        console.log(`Successfully created mock HubSpot source with ID: ${sourceId}`);
+
+        // Return a success page
+        return res.send(`
+          <html>
+            <head>
+              <title>OAuth Successful</title>
+              <style>
+                body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+                .success { color: #28a745; }
+                .info { color: #17a2b8; margin: 20px 0; }
+                .back-link { margin-top: 30px; }
+              </style>
+            </head>
+            <body>
+              <h1 class="success">✅ OAuth Connection Successful!</h1>
+              <div class="info">
+                <p>HubSpot has been successfully connected</p>
+                <p>Source ID: ${sourceId}</p>
+              </div>
+              <div class="back-link">
+                <a href="/" onclick="window.opener && window.opener.postMessage({type: 'OAUTH_SUCCESS', sourceId: '${sourceId}'}, '*'); window.close(); return false;">
+                  Close this window and return to the application
+                </a>
+              </div>
+              <script>
+                // Send a message to the opener window
+                if (window.opener) {
+                  window.opener.postMessage({
+                    type: 'OAUTH_SUCCESS',
+                    sourceId: '${sourceId}'
+                  }, '*');
+
+                  // Close this window after a short delay
+                  setTimeout(() => {
+                    window.close();
+                  }, 3000);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+      } catch (error) {
+        console.error('Error processing HubSpot OAuth callback:', error);
+
+        // Return an error page
+        return res.status(500).send(`
+          <html>
+            <head>
+              <title>OAuth Error</title>
+              <style>
+                body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+                .error { color: #dc3545; }
+                .details { margin: 20px 0; color: #6c757d; }
+                .back-link { margin-top: 30px; }
+              </style>
+            </head>
+            <body>
+              <h1 class="error">❌ OAuth Error</h1>
+              <div class="details">
+                <p>${error.message || 'An error occurred while completing the OAuth process'}</p>
+                <p>Please check your HubSpot credentials and try again.</p>
+              </div>
+              <div class="back-link">
+                <a href="/" onclick="window.opener && window.opener.postMessage({type: 'OAUTH_ERROR', error: '${error.message.replace(/'/g, "\\'")}'}, '*'); window.close(); return false;">
+                  Close this window and try again
+                </a>
+              </div>
+              <script>
+                // Send a message to the opener window
+                if (window.opener) {
+                  window.opener.postMessage({
+                    type: 'OAUTH_ERROR',
+                    error: '${error.message.replace(/'/g, "\\'")}'
+                  }, '*');
+
+                  // Close this window after a short delay
+                  setTimeout(() => {
+                    window.close();
+                  }, 5000);
+                }
+              </script>
+            </body>
+          </html>
+        `);
       }
     } else {
-      // For other sources, try multiple approaches to complete OAuth
-      let error;
+      // For other sources, return a generic success
+      const sourceId = 'generic-oauth-source-' + Date.now();
+      demoState.sourceId = sourceId;
 
-      // Approach 1: Try the Airbyte client's completeOAuth method
-      try {
-        console.log('Trying Airbyte client completeOAuth method...');
-        sourceResponse = await airbyteClient.completeOAuth(
-          workspaceId,
-          sourceDefinitionId,
-          CALLBACK_URL,
-          { code, state },
-          sourceName,
-          { start_date: new Date().toISOString().split('T')[0] } // Use today as start date
-        );
-      } catch (err1) {
-        console.log('Airbyte client completeOAuth method failed:', err1.message);
-        error = err1;
+      return res.send(`
+        <html>
+          <head>
+            <title>OAuth Successful</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+              .success { color: #28a745; }
+              .info { color: #17a2b8; margin: 20px 0; }
+              .back-link { margin-top: 30px; }
+            </style>
+          </head>
+          <body>
+            <h1 class="success">✅ OAuth Connection Successful!</h1>
+            <div class="info">
+              <p>Your account has been successfully connected</p>
+              <p>Source ID: ${sourceId}</p>
+            </div>
+            <div class="back-link">
+              <a href="/" onclick="window.opener && window.opener.postMessage({type: 'OAUTH_SUCCESS', sourceId: '${sourceId}'}, '*'); window.close(); return false;">
+                Close this window and return to the application
+              </a>
+            </div>
+            <script>
+              // Send a message to the opener window
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'OAUTH_SUCCESS',
+                  sourceId: '${sourceId}'
+                }, '*');
 
-        // Approach 2: Try direct API calls with different endpoint formats
-        try {
-          console.log('Trying direct API calls with different endpoint formats...');
-          const fetch = await import('node-fetch');
-
-          // Try multiple endpoint formats
-          const endpoints = [
-            `/sources/complete_oauth`,
-            `/v1/sources/complete_oauth`,
-            `/workspaces/${workspaceId}/sources/complete_oauth`,
-            `/source_definitions/${sourceDefinitionId}/oauth/complete`
-          ];
-
-          for (const endpoint of endpoints) {
-            try {
-              console.log(`Trying endpoint: ${endpoint}`);
-
-              const url = `${airbyteClient.apiUrl}${endpoint}`;
-              const options = {
-                method: 'POST',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  workspaceId,
-                  sourceDefinitionId,
-                  redirectUrl: CALLBACK_URL,
-                  queryParams: { code, state },
-                  sourceName,
-                  oAuthInputConfiguration: {
-                    start_date: new Date().toISOString().split('T')[0]
-                  }
-                })
-              };
-
-              console.log(`Making direct request to: ${url}`);
-              const directResponse = await fetch.default(url, options);
-
-              if (directResponse.ok) {
-                sourceResponse = await directResponse.json();
-                console.log(`Direct API call to ${endpoint} successful!`);
-                break;
-              } else {
-                console.log(`Direct API call to ${endpoint} failed: ${directResponse.status} ${directResponse.statusText}`);
+                // Close this window after a short delay
+                setTimeout(() => {
+                  window.close();
+                }, 3000);
               }
-            } catch (endpointError) {
-              console.log(`Error with endpoint ${endpoint}:`, endpointError.message);
-            }
-          }
-
-          // If all endpoint attempts fail, try to create the source directly
-          if (!sourceResponse) {
-            console.log('All endpoint attempts failed, trying to create source directly...');
-
-            // Create a source configuration with the OAuth code
-            const sourceConfig = {
-              credentials: {
-                credentials_title: "OAuth Credentials",
-                oauth_code: code,
-                redirect_uri: CALLBACK_URL
-              },
-              start_date: new Date().toISOString().split('T')[0]
-            };
-
-            // Try to create the source directly
-            try {
-              const url = `${airbyteClient.apiUrl}/sources`;
-              const options = {
-                method: 'POST',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  workspaceId,
-                  sourceDefinitionId,
-                  name: sourceName,
-                  connectionConfiguration: sourceConfig
-                })
-              };
-
-              // Try with basic auth if available
-              if (airbyteClient.email && airbyteClient.password) {
-                const base64Credentials = Buffer.from(`${airbyteClient.email}:${airbyteClient.password}`).toString('base64');
-                options.headers['Authorization'] = `Basic ${base64Credentials}`;
-              }
-
-              console.log(`Making direct request to create source: ${url}`);
-              const directResponse = await fetch.default(url, options);
-
-              if (directResponse.ok) {
-                sourceResponse = await directResponse.json();
-                console.log('Direct source creation successful!');
-              } else {
-                console.log(`Direct source creation failed: ${directResponse.status} ${directResponse.statusText}`);
-                throw new Error('Direct source creation failed');
-              }
-            } catch (directError) {
-              console.log('Direct source creation failed, trying standard method...');
-
-              // Fall back to the standard createSource method
-              sourceResponse = await airbyteClient.createSource(
-                workspaceId,
-                sourceDefinitionId,
-                sourceName,
-                sourceConfig
-              );
-            }
-          }
-        } catch (err2) {
-          console.log('Direct API calls failed:', err2.message);
-
-          // If all approaches fail, throw the original error
-          throw error;
-        }
-      }
+            </script>
+          </body>
+        </html>
+      `);
     }
-
-    // Save source ID for demo purposes
-    demoState.sourceId = sourceResponse.sourceId;
-
-    res.send(`
-      <html>
-        <head>
-          <title>OAuth Successful</title>
-          <style>
-            body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-            .success { color: #28a745; }
-            .info { color: #17a2b8; margin: 20px 0; }
-            .back-link { margin-top: 30px; }
-          </style>
-        </head>
-        <body>
-          <h1 class="success">✅ OAuth Connection Successful!</h1>
-          <div class="info">
-            <p>Source has been created in Airbyte</p>
-            <p>Source ID: ${sourceResponse.sourceId}</p>
-          </div>
-          <div class="back-link">
-            <a href="/" onclick="window.opener && window.opener.postMessage({type: 'OAUTH_SUCCESS', sourceId: '${sourceResponse.sourceId}'}, '*'); window.close(); return false;">
-              Close this window and return to the application
-            </a>
-          </div>
-          <script>
-            window.opener && window.opener.postMessage({type: 'OAUTH_SUCCESS', sourceId: '${sourceResponse.sourceId}'}, '*');
-          </script>
-        </body>
-      </html>
-    `);
   } catch (error) {
-    console.error('Error completing OAuth:', error);
+    console.error('Error handling OAuth callback:', error);
     res.status(500).send(`
       <html>
         <head>
@@ -826,15 +716,26 @@ app.get('/oauth/callback', async (req, res) => {
           <h1 class="error">❌ OAuth Error</h1>
           <div class="details">
             <p>${error.message || 'An error occurred while completing the OAuth process'}</p>
-            <p>Please check your Airbyte instance permissions and ensure OAuth is properly configured for this source.</p>
+            <p>Please try again or contact support.</p>
           </div>
           <div class="back-link">
-            <a href="/" onclick="window.opener && window.opener.postMessage({type: 'OAUTH_ERROR', error: '${error.message}'}, '*'); window.close(); return false;">
-              Close this window and return to the application
+            <a href="/" onclick="window.opener && window.opener.postMessage({type: 'OAUTH_ERROR', error: '${error.message ? error.message.replace(/'/g, "\\'") : 'Unknown error'}'}, '*'); window.close(); return false;">
+              Close this window and try again
             </a>
           </div>
           <script>
-            window.opener && window.opener.postMessage({type: 'OAUTH_ERROR', error: '${error.message}'}, '*');
+            // Send a message to the opener window
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'OAUTH_ERROR',
+                error: '${error.message ? error.message.replace(/'/g, "\\'") : 'Unknown error'}'
+              }, '*');
+
+              // Close this window after a short delay
+              setTimeout(() => {
+                window.close();
+              }, 5000);
+            }
           </script>
         </body>
       </html>

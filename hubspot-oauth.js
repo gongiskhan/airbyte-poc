@@ -1,7 +1,6 @@
 /**
- * Direct HubSpot OAuth Implementation
- * This module provides functions to handle OAuth with HubSpot directly,
- * bypassing Airbyte's OAuth flow completely.
+ * HubSpot OAuth Helper for Arkivo Airbyte Platform
+ * This module provides functions to initiate OAuth with HubSpot via the Arkivo Airbyte platform.
  */
 
 // Use dynamic import for node-fetch
@@ -9,173 +8,86 @@ async function getFetch() {
   return (await import('node-fetch')).default;
 }
 
-/**
- * Generate an OAuth URL for HubSpot
- * @param {string} clientId - HubSpot OAuth client ID
- * @param {string} redirectUrl - URL to redirect to after authorization
- * @param {string} workspaceId - Airbyte workspace ID
- * @param {string} sourceDefinitionId - Airbyte source definition ID
- * @returns {string} - HubSpot OAuth URL
- */
-function generateHubSpotOAuthUrl(clientId, redirectUrl, workspaceId, sourceDefinitionId) {
-  // Required scopes for HubSpot
-  const scopes = [
-    "crm.objects.contacts.read",
-    "crm.objects.companies.read",
-    "crm.objects.deals.read",
-    "crm.schemas.deals.read",
-    "crm.schemas.companies.read",
-    "content",
-    "crm.lists.read",
-    "forms",
-    "tickets",
-    "e-commerce",
-    "sales-email-read",
-    "automation"
-  ];
-
-  // Create the OAuth URL
-  const scopesParam = encodeURIComponent(scopes.join(' '));
-  const stateObj = {
-    workspaceId,
-    sourceDefinitionId
-  };
-
-  console.log('Creating OAuth state parameter with:', stateObj);
-  const state = encodeURIComponent(JSON.stringify(stateObj));
-
-  const oauthUrl = `https://app.hubspot.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUrl)}&scope=${scopesParam}&state=${state}`;
-  console.log('Generated HubSpot OAuth URL:', oauthUrl);
-
-  return oauthUrl;
-}
+const ARKIVO_PLATFORM_API_BASE_URL = process.env.ARKIVO_PLATFORM_API_BASE_URL || 'http://localhost:3003'; // Or where your Arkivo platform API is
 
 /**
- * Exchange an authorization code for access and refresh tokens
- * @param {string} clientId - HubSpot OAuth client ID
- * @param {string} clientSecret - HubSpot OAuth client secret
- * @param {string} redirectUrl - URL to redirect to after authorization
- * @param {string} code - Authorization code from HubSpot
- * @returns {Promise<Object>} - Token response
+ * Initiates the HubSpot OAuth flow via the Arkivo Airbyte Platform.
+ * It calls the platform to get a HubSpot consent URL, which the client then redirects to.
+ * @param {string} workspaceId - Airbyte workspace ID (from Arkivo platform context)
+ * @param {string} pocClientRedirectUrl - The full URL in this POC app where the user should be redirected after the platform completes OAuth.
+ * @returns {Promise<string>} - The HubSpot consent URL to redirect the user to.
+ * @throws {Error} if the platform call fails.
  */
-async function exchangeCodeForTokens(clientId, clientSecret, redirectUrl, code) {
+async function initiatePlatformHubSpotOAuth(workspaceId, pocClientRedirectUrl) {
+  console.log('Initiating HubSpot OAuth via Arkivo Platform...');
+  console.log('- Workspace ID:', workspaceId);
+  console.log('- POC Client Redirect URL:', pocClientRedirectUrl);
+
+  const fetch = await getFetch();
+  const platformGetConsentUrl = `${ARKIVO_PLATFORM_API_BASE_URL}/api/v1/source_oauths/get_consent_url`;
+  const HUBSPOT_SOURCE_DEFINITION_ID = '36c891d9-4bd9-43ac-bad2-10e12756272c'; // Standard HubSpot Source Def ID
+
   try {
-    console.log('Exchanging code for tokens with:');
-    console.log('- Client ID:', clientId);
-    console.log('- Client Secret:', clientSecret ? '********' : 'not set');
-    console.log('- Redirect URL:', redirectUrl);
-    console.log('- Code:', code ? `${code.substring(0, 10)}...` : 'not set');
-
-    const fetch = await getFetch();
-
-    const params = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUrl,
-      code: code
-    });
-
-    console.log('Making POST request to https://api.hubapi.com/oauth/v1/token');
-
-    const response = await fetch('https://api.hubapi.com/oauth/v1/token', {
+    const response = await fetch(platformGetConsentUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/json',
+        // Add any necessary auth headers for your Arkivo platform API here
+        // e.g., 'Authorization': 'Bearer YOUR_ARKIVO_API_TOKEN'
       },
-      body: params
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `Failed to exchange code for tokens: HTTP ${response.status} ${response.statusText}`;
-
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = `Failed to exchange code for tokens: ${errorData.message || response.statusText}`;
-        console.error('Error response from HubSpot:', errorData);
-      } catch (parseError) {
-        console.error('Error response from HubSpot (non-JSON):', errorText);
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    const tokens = await response.json();
-    console.log('Successfully exchanged code for tokens');
-    return tokens;
-  } catch (error) {
-    console.error('Error exchanging code for tokens:', error);
-    throw error;
-  }
-}
-
-/**
- * Refresh an access token using a refresh token
- * @param {string} clientId - HubSpot OAuth client ID
- * @param {string} clientSecret - HubSpot OAuth client secret
- * @param {string} refreshToken - Refresh token from HubSpot
- * @returns {Promise<Object>} - New token response
- */
-async function refreshAccessToken(clientId, clientSecret, refreshToken) {
-  try {
-    console.log('Refreshing HubSpot access token...');
-    const fetch = await getFetch();
-
-    const response = await fetch('https://api.hubapi.com/oauth/v1/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken
+      body: JSON.stringify({
+        sourceDefinitionId: HUBSPOT_SOURCE_DEFINITION_ID,
+        workspaceId: workspaceId,
+        redirectUrl: pocClientRedirectUrl, // This is where the POC wants to go after platform is done
+        oAuthInputConfiguration: {} // Usually empty if platform uses instance-wide credentials
       })
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Failed to refresh access token: ${errorData.message || response.statusText}`);
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(`Failed to get HubSpot consent URL from platform: ${errorData.message || response.statusText} (Status: ${response.status})`);
     }
 
-    const tokens = await response.json();
-    console.log('Successfully refreshed HubSpot access token');
-    return tokens;
+    const result = await response.json();
+    if (!result.consentUrl) {
+      throw new Error('Platform did not return a consentUrl for HubSpot.');
+    }
+
+    console.log('Received HubSpot consent URL from platform:', result.consentUrl);
+    return result.consentUrl;
   } catch (error) {
-    console.error('Error refreshing access token:', error);
+    console.error('Error initiating platform HubSpot OAuth:', error);
     throw error;
   }
 }
 
 /**
- * Create a HubSpot source in Airbyte using OAuth credentials
- * @param {Object} airbyteClient - Airbyte client instance
+ * (REVISED) Create a HubSpot source in Airbyte using platform-managed OAuth.
+ * The platform has already handled token acquisition.
+ * @param {Object} airbyteClient - Airbyte client instance (configured to talk to Arkivo platform's Airbyte API proxy)
  * @param {string} workspaceId - Airbyte workspace ID
- * @param {string} sourceDefinitionId - Airbyte source definition ID
+ * @param {string} sourceDefinitionId - Airbyte source definition ID for HubSpot
  * @param {string} sourceName - Name for the new source
- * @param {Object} tokens - OAuth tokens from HubSpot
  * @returns {Promise<Object>} - Created source
  */
-async function createHubSpotSourceWithOAuth(airbyteClient, workspaceId, sourceDefinitionId, sourceName, tokens) {
+async function createHubSpotSourceWithPlatformOAuth(airbyteClient, workspaceId, sourceDefinitionId, sourceName) {
   try {
-    console.log('Creating HubSpot source with OAuth credentials via Airbyte');
+    console.log('Creating HubSpot source with platform-managed OAuth credentials via Arkivo Airbyte...');
 
-    // Create the source configuration for Airbyte's HubSpot connector
+    // Configuration when OAuth is handled by the platform/Airbyte control plane.
+    // The key is that client_id, client_secret, access_token, refresh_token are NOT sent.
+    // Airbyte core uses the tokens it stored during the OAuth flow.
     const sourceConfig = {
       credentials: {
-        credentials_title: "OAuth Credentials",
-        client_id: process.env.HUBSPOT_CLIENT_ID,
-        client_secret: process.env.HUBSPOT_CLIENT_SECRET,
-        refresh_token: tokens.refresh_token,
-        access_token: tokens.access_token
+        auth_method: "oauth2.0" // Indicates platform-managed OAuth
+        // Potentially other non-sensitive OAuth related fields if the spec requires,
+        // but usually not needed for standard platform OAuth.
       },
-      start_date: new Date().toISOString().split('T')[0]
+      start_date: new Date().toISOString().split('T')[0] // Example: set start_date, adjust as needed
+      // Add any other HubSpot specific configurations required by its spec here (e.g. enable_experimental_streams)
     };
 
-    // Create the source using the Airbyte client
-    console.log('Creating HubSpot source using Airbyte client...');
+    console.log('Creating HubSpot source using Airbyte client with config:', JSON.stringify(sourceConfig, null, 2));
     return await airbyteClient.createSource(
       workspaceId,
       sourceDefinitionId,
@@ -183,56 +95,19 @@ async function createHubSpotSourceWithOAuth(airbyteClient, workspaceId, sourceDe
       sourceConfig
     );
   } catch (error) {
-    console.error('Error creating HubSpot source with OAuth via Airbyte:', error);
+    console.error('Error creating HubSpot source with platform OAuth via Arkivo Airbyte:', error);
     throw error;
   }
 }
 
-/**
- * Update an existing HubSpot source with refreshed OAuth tokens
- * @param {Object} airbyteClient - Airbyte client instance
- * @param {string} sourceId - Airbyte source ID to update
- * @param {Object} tokens - New OAuth tokens from HubSpot
- * @returns {Promise<Object>} - Updated source
- */
-async function updateHubSpotSourceWithRefreshedTokens(airbyteClient, sourceId, tokens) {
-  try {
-    console.log(`Updating HubSpot source ${sourceId} with refreshed OAuth tokens`);
-
-    // First, get the current source configuration
-    const source = await airbyteClient.getSource(sourceId);
-
-    if (!source) {
-      throw new Error(`Source with ID ${sourceId} not found`);
-    }
-
-    // Create an updated configuration with the new tokens
-    const updatedConfig = {
-      ...source.connectionConfiguration,
-      credentials: {
-        ...source.connectionConfiguration.credentials,
-        refresh_token: tokens.refresh_token,
-        access_token: tokens.access_token
-      }
-    };
-
-    // Update the source with the new configuration
-    console.log('Updating source with refreshed tokens...');
-    return await airbyteClient.updateSource(
-      sourceId,
-      source.name,
-      updatedConfig
-    );
-  } catch (error) {
-    console.error('Error updating HubSpot source with refreshed tokens:', error);
-    throw error;
-  }
-}
+// Functions no longer needed by the POC as platform handles them:
+// - exchangeCodeForTokens
+// - refreshAccessToken
+// - generateHubSpotOAuthUrl (replaced by initiatePlatformHubSpotOAuth)
+// - updateHubSpotSourceWithRefreshedTokens (update would also use simplified config if needed)
 
 module.exports = {
-  generateHubSpotOAuthUrl,
-  exchangeCodeForTokens,
-  refreshAccessToken,
-  createHubSpotSourceWithOAuth,
-  updateHubSpotSourceWithRefreshedTokens
+  initiatePlatformHubSpotOAuth,
+  createHubSpotSourceWithPlatformOAuth
+  // Old functions removed from export
 };

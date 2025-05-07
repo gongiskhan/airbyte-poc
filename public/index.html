@@ -282,12 +282,8 @@
 
     <!-- OAuth Authentication Fields -->
     <div id="oauthFields">
-      <div class="alert" style="background-color: #ffcccc; color: #cc0000;">
-        <strong>Warning:</strong> OAuth authentication is not fully supported in self-hosted Airbyte instances due to permission restrictions.
-        We recommend using Private App authentication instead for self-hosted instances.
-      </div>
       <div class="form-group" id="oauth-section">
-        <button onclick="initiateOAuth()" id="initiateOAuthBtn" disabled>Connect HubSpot via Airbyte OAuth</button>
+        <button onclick="initiateOAuth()" id="initiateOAuthBtn" disabled>Connect HubSpot via OAuth</button>
         <button onclick="toggleOAuthRefreshSection()" style="margin-left: 10px;">Show Token Refresh</button>
       </div>
 
@@ -482,8 +478,8 @@
   <script>
     // Store IDs and state
     const state = {
-      workspaceId: null,
-      sourceDefinitionId: null,
+      workspaceId: '95eb9a83-5c21-4418-926d-074e879f2270',
+      sourceDefinitionId: '36c891d9-4bd9-43ac-bad2-10e12756272c',
       sourceId: null,
       destinationDefinitionId: null,
       destinationId: null,
@@ -511,7 +507,12 @@
     }
 
     function enableButton(buttonId) {
-      document.getElementById(buttonId).disabled = false;
+      const button = document.getElementById(buttonId);
+      if (button) {
+        button.disabled = false;
+      } else {
+        console.warn(`Button with ID ${buttonId} not found`);
+      }
     }
 
     async function fetchData(url, method = 'GET', body = null) {
@@ -580,6 +581,40 @@
       }
     }
 
+    // Step 3b: Initiate OAuth via Proxy
+    async function initiateOAuthViaProxy() {
+      try {
+        if (!state.workspaceId) {
+          showStatus('step3', '❌ Please create a workspace first', 'error');
+          return;
+        }
+
+        if (!state.sourceDefinitionId) {
+          showStatus('step3', '❌ Please find a source definition first', 'error');
+          return;
+        }
+
+        showStatus('step3', 'Initiating OAuth flow via proxy...', 'info');
+
+        const data = await fetchData('/initiate-oauth-via-proxy', 'POST', {
+          workspaceId: state.workspaceId,
+          sourceDefinitionId: state.sourceDefinitionId
+        });
+
+        if (data.consentUrl) {
+          showStatus('step3', '✅ OAuth flow initiated successfully via proxy!', 'success');
+          showResourceInfo('source-info', data);
+
+          // Open the consent URL in a new window
+          window.open(data.consentUrl, '_blank');
+        } else {
+          showStatus('step3', '❌ Failed to get consent URL from proxy', 'error');
+        }
+      } catch (error) {
+        showStatus('step3', `❌ Error: ${error.message}`, 'error');
+      }
+    }
+
     // Step 3a: Find Source Definition
     async function findSourceDefinition() {
       try {
@@ -593,8 +628,16 @@
         showStatus('step3-find', `✅ Found ${data.sourceDefinition.name} source definition`, 'success');
         showResourceInfo('source-def-info', data.sourceDefinition);
 
-        enableButton('initiateOAuthBtn');
-        enableButton('setupPrivateAppSourceBtn');
+        // Safely enable buttons if they exist
+        const initiateOAuthBtn = document.getElementById('initiateOAuthBtn');
+        if (initiateOAuthBtn) {
+          initiateOAuthBtn.disabled = false;
+        }
+
+        const setupPrivateAppSourceBtn = document.getElementById('setupPrivateAppSourceBtn');
+        if (setupPrivateAppSourceBtn) {
+          setupPrivateAppSourceBtn.disabled = false;
+        }
       } catch (error) {
         showStatus('step3-find', `❌ Error: ${error.message}`, 'error');
       }
@@ -650,47 +693,54 @@
     // Step 3b: Initiate OAuth via Airbyte
     async function initiateOAuth() {
       try {
-        if (!state.workspaceId) {
-          showStatus('step3', '❌ Please create a workspace first', 'error');
-          return;
-        }
+        // Use hardcoded workspace ID for now
+        const workspaceId = '95eb9a83-5c21-4418-926d-074e879f2270';
+        // Use hardcoded source definition ID for HubSpot
+        const sourceDefinitionId = '36c891d9-4bd9-43ac-bad2-10e12756272c';
 
-        if (!state.sourceDefinitionId) {
-          showStatus('step3', '❌ Please find a source definition first', 'error');
-          return;
-        }
-
-        showStatus('step3', 'Initiating HubSpot OAuth flow via Airbyte...', 'info');
+        showStatus('step3', 'Initiating HubSpot OAuth flow...', 'info');
 
         const data = await fetchData('/initiate-oauth', 'POST', {
-          workspaceId: state.workspaceId,
-          sourceDefinitionId: state.sourceDefinitionId
+          workspaceId: workspaceId,
+          sourceDefinitionId: sourceDefinitionId
         });
 
-        // Open OAuth consent window
-        const popup = window.open(data.consentUrl, '_blank', 'width=800,height=600');
+        if (data && data.consentUrl) {
+          // Open OAuth consent window
+          const popup = window.open(data.consentUrl, '_blank', 'width=800,height=600');
 
-        if (!popup) {
-          throw new Error('Popup was blocked! Please allow popups for this site.');
-        }
-
-        showStatus('step3', 'HubSpot OAuth consent window opened. Please complete the authorization.', 'info');
-
-        // Listen for messages from the popup
-        window.addEventListener('message', function(event) {
-          // Check if it's our expected message
-          if (event.data && event.data.type) {
-            if (event.data.type === 'OAUTH_SUCCESS') {
-              state.sourceId = event.data.sourceId;
-              showStatus('step3', '✅ OAuth successful! HubSpot source created via Airbyte.', 'success');
-              showResourceInfo('source-info', { sourceId: state.sourceId });
-
-              enableButton('findDestBtn');
-            } else if (event.data.type === 'OAUTH_ERROR') {
-              showStatus('step3', `❌ OAuth Error: ${event.data.error}`, 'error');
-            }
+          if (!popup) {
+            throw new Error('Popup was blocked! Please allow popups for this site.');
           }
-        });
+
+          showStatus('step3', 'HubSpot OAuth consent window opened. Please complete the authorization.', 'info');
+
+          // Store the IDs in state
+          state.workspaceId = workspaceId;
+          state.sourceDefinitionId = sourceDefinitionId;
+
+          // Listen for messages from the popup
+          window.addEventListener('message', function(event) {
+            // Check if it's our expected message
+            if (event.data && event.data.type) {
+              if (event.data.type === 'OAUTH_SUCCESS') {
+                state.sourceId = event.data.sourceId;
+                showStatus('step3', '✅ OAuth successful! HubSpot source created.', 'success');
+                showResourceInfo('source-info', { sourceId: state.sourceId });
+
+                // Enable the next step button
+                const findDestBtn = document.getElementById('findDestBtn');
+                if (findDestBtn) {
+                  findDestBtn.disabled = false;
+                }
+              } else if (event.data.type === 'OAUTH_ERROR') {
+                showStatus('step3', `❌ OAuth Error: ${event.data.error}`, 'error');
+              }
+            }
+          });
+        } else {
+          throw new Error('Failed to get consent URL');
+        }
       } catch (error) {
         showStatus('step3', `❌ Error: ${error.message}`, 'error');
       }
