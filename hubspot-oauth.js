@@ -8,17 +8,19 @@ async function getFetch() {
   return (await import('node-fetch')).default;
 }
 
-const ARKIVO_PLATFORM_API_BASE_URL = process.env.ARKIVO_PLATFORM_API_BASE_URL || 'http://localhost:3003'; // Or where your Arkivo platform API is
+const ARKIVO_PLATFORM_API_BASE_URL = process.env.ARKIVO_PLATFORM_API_BASE_URL || 'http://scuver.services:8000'; // Or where your Arkivo platform API is
 
 /**
  * Initiates the HubSpot OAuth flow via the Arkivo Airbyte Platform.
  * It calls the platform to get a HubSpot consent URL, which the client then redirects to.
  * @param {string} workspaceId - Airbyte workspace ID (from Arkivo platform context)
  * @param {string} pocClientRedirectUrl - The full URL in this POC app where the user should be redirected after the platform completes OAuth.
+ * @param {string} authEmail - Email for Basic Authentication.
+ * @param {string} authPassword - Password for Basic Authentication.
  * @returns {Promise<string>} - The HubSpot consent URL to redirect the user to.
  * @throws {Error} if the platform call fails.
  */
-async function initiatePlatformHubSpotOAuth(workspaceId, pocClientRedirectUrl) {
+async function initiatePlatformHubSpotOAuth(workspaceId, pocClientRedirectUrl, authEmail, authPassword) {
   console.log('Initiating HubSpot OAuth via Arkivo Platform...');
   console.log('- Workspace ID:', workspaceId);
   console.log('- POC Client Redirect URL:', pocClientRedirectUrl);
@@ -28,13 +30,18 @@ async function initiatePlatformHubSpotOAuth(workspaceId, pocClientRedirectUrl) {
   const HUBSPOT_SOURCE_DEFINITION_ID = '36c891d9-4bd9-43ac-bad2-10e12756272c'; // Standard HubSpot Source Def ID
 
   try {
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    if (authEmail && authPassword) {
+      const base64Credentials = Buffer.from(`${authEmail}:${authPassword}`).toString('base64');
+      headers['Authorization'] = `Basic ${base64Credentials}`;
+      console.log('Using Basic authentication for platform call');
+    }
+
     const response = await fetch(platformGetConsentUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Add any necessary auth headers for your Arkivo platform API here
-        // e.g., 'Authorization': 'Bearer YOUR_ARKIVO_API_TOKEN'
-      },
+      headers: headers,
       body: JSON.stringify({
         sourceDefinitionId: HUBSPOT_SOURCE_DEFINITION_ID,
         workspaceId: workspaceId,

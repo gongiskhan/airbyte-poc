@@ -180,31 +180,23 @@ class AirbyteClient {
 
   /**
    * List all workspaces
-   * Note: This function is not working with the current API setup
-   * We'll return a hardcoded response with the existing workspace ID
    */
   async listWorkspaces() {
     try {
-      console.log('Using hardcoded workspace list instead of making API call');
-
-      // Return a hardcoded response with the existing workspace ID
-      return {
-        workspaces: [
-          {
-            workspaceId: '95eb9a83-5c21-4418-926d-074e879f2270',
-            name: 'Default Workspace',
-            dataResidency: 'auto'
-          }
-        ]
-      };
+      console.log('Attempting to list workspaces from Airbyte API...');
+      // Make an actual API call to list workspaces
+      const data = await this.request('/workspaces', 'GET');
+      console.log('Successfully listed workspaces:', data);
+      return data; // Should return an object like { workspaces: [...] }
     } catch (error) {
-      console.error('Error with workspaces:', error);
-      // Return a hardcoded response even if there's an error
+      console.error('Error listing workspaces from API:', error);
+      // Fallback to a hardcoded response if the API call fails, to avoid breaking the UI entirely
+      console.log('Falling back to hardcoded workspace list due to API error.');
       return {
         workspaces: [
           {
-            workspaceId: '95eb9a83-5c21-4418-926d-074e879f2270',
-            name: 'Default Workspace',
+            workspaceId: 'fallback-workspace-id-from-client-error',
+            name: 'Fallback Workspace (Error)',
             dataResidency: 'auto'
           }
         ]

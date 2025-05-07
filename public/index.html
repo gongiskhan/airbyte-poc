@@ -693,16 +693,18 @@
     // Step 3b: Initiate OAuth via Airbyte
     async function initiateOAuth() {
       try {
-        // Use hardcoded workspace ID for now
-        const workspaceId = '95eb9a83-5c21-4418-926d-074e879f2270';
-        // Use hardcoded source definition ID for HubSpot
-        const sourceDefinitionId = '36c891d9-4bd9-43ac-bad2-10e12756272c';
+        // Use workspaceId and sourceDefinitionId from the global state
+        // which are set by previous steps (Create Workspace and Find Source Definition)
+        if (!state.workspaceId || !state.sourceDefinitionId) {
+          showStatus('step3', '❌ Workspace ID or Source Definition ID is missing. Please complete previous steps.', 'error');
+          return;
+        }
 
         showStatus('step3', 'Initiating HubSpot OAuth flow...', 'info');
 
         const data = await fetchData('/initiate-oauth', 'POST', {
-          workspaceId: workspaceId,
-          sourceDefinitionId: sourceDefinitionId
+          workspaceId: state.workspaceId, // Use ID from state
+          sourceDefinitionId: state.sourceDefinitionId // Use ID from state
         });
 
         if (data && data.consentUrl) {
@@ -714,10 +716,6 @@
           }
 
           showStatus('step3', 'HubSpot OAuth consent window opened. Please complete the authorization.', 'info');
-
-          // Store the IDs in state
-          state.workspaceId = workspaceId;
-          state.sourceDefinitionId = sourceDefinitionId;
 
           // Listen for messages from the popup
           window.addEventListener('message', function(event) {

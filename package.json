@@ -5,8 +5,7 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start-client": "(kill $(lsof -ti :3003) 2>/dev/null || true) && nodemon server.js"
   },
   "keywords": [
     "airbyte",
@@ -24,6 +23,7 @@
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "serve": "^14.2.0"
   }
 }

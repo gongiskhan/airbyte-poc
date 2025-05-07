@@ -85,8 +85,8 @@ app.post('/create-workspace', async (req, res) => {
   try {
     const { name, email } = req.body;
 
-    // Use a hardcoded workspace ID
-    const workspaceId = '4fa87658-8ced-45d0-979e-30edc0c4a494';
+    // Use the workspace ID that seems to be known by the instance/other parts of the POC
+    const workspaceId = '95eb9a83-5c21-4418-926d-074e879f2270';
     demoState.workspaceId = workspaceId;
 
     console.log(`Using existing workspace with ID: ${workspaceId}`);
@@ -326,31 +326,22 @@ app.post('/initiate-oauth', async (req, res) => {
 
     // For HubSpot, use the direct OAuth flow
     if (sourceDefinitionId === '36c891d9-4bd9-43ac-bad2-10e12756272c') {
-      console.log('Using direct HubSpot OAuth implementation...');
+      console.log('Using platform-managed HubSpot OAuth implementation...');
 
-      // Get HubSpot client ID from environment variables
-      const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
-
-      if (!hubspotClientId) {
-        return res.status(400).json({
-          error: 'HubSpot Client ID is required',
-          message: 'Please set HUBSPOT_CLIENT_ID in your .env file'
-        });
-      }
-
-      // Generate HubSpot OAuth URL directly
-      const consentUrl = hubspotOAuth.generateHubSpotOAuthUrl(
-        hubspotClientId,
-        CALLBACK_URL,
+      // The CALLBACK_URL is where the user should be redirected in this POC app
+      // after the Arkivo platform completes its part of the OAuth flow.
+      const consentUrl = await hubspotOAuth.initiatePlatformHubSpotOAuth(
         workspaceId,
-        sourceDefinitionId
+        CALLBACK_URL, // This is the redirect URL for the POC client itself
+        AIRBYTE_EMAIL,
+        AIRBYTE_PASSWORD
       );
 
       return res.json({
         success: true,
         consentUrl,
         oauthResponse: { authorizationUrl: consentUrl },
-        message: 'Successfully initiated HubSpot OAuth flow via direct method'
+        message: 'Successfully initiated HubSpot OAuth flow via platform-managed method'
       });
     }
 
@@ -536,7 +527,7 @@ app.get('/oauth/callback', async (req, res) => {
 
     // For HubSpot, use direct OAuth implementation
     if (isHubSpot) {
-      console.log('Using direct HubSpot OAuth implementation for callback...');
+      console.log('Using platform-managed HubSpot OAuth implementation for callback...');
 
       // Get HubSpot client ID and secret from environment variables
       const hubspotClientId = process.env.HUBSPOT_CLIENT_ID || AIRBYTE_CLIENT_ID;
